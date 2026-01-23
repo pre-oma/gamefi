@@ -1,0 +1,96 @@
+DEPLOYING GAMEFI TO NETLIFY FROM GITHUB
+========================================
+
+PREREQUISITES
+-------------
+- GitHub repository with your code pushed
+- Netlify account (free at netlify.com)
+
+
+STEP 1: PUSH TO GITHUB
+----------------------
+If not already done:
+
+  git push origin main
+
+
+STEP 2: CONNECT TO NETLIFY
+--------------------------
+1. Go to https://app.netlify.com
+2. Click "Add new site" > "Import an existing project"
+3. Select "GitHub" as your Git provider
+4. Authorize Netlify to access your GitHub account
+5. Select your "gamefi" repository
+
+
+STEP 3: CONFIGURE BUILD SETTINGS
+--------------------------------
+Netlify should auto-detect Next.js, but verify these settings:
+
+  Build command:        npm run build
+  Publish directory:    .next
+
+For Next.js 16+, Netlify uses the Next.js Runtime automatically.
+
+
+STEP 4: DEPLOY
+--------------
+1. Click "Deploy site"
+2. Wait for the build to complete (2-5 minutes)
+3. Your site will be live at a random URL like:
+   https://random-name-123456.netlify.app
+
+
+STEP 5: CUSTOM DOMAIN (OPTIONAL)
+--------------------------------
+1. Go to Site settings > Domain management
+2. Click "Add custom domain"
+3. Follow DNS configuration instructions
+
+
+AUTOMATIC DEPLOYMENTS
+---------------------
+After initial setup, every push to your main branch will
+automatically trigger a new deployment.
+
+
+ENVIRONMENT VARIABLES (IF NEEDED)
+---------------------------------
+1. Go to Site settings > Environment variables
+2. Add any required variables
+3. Redeploy for changes to take effect
+
+
+TROUBLESHOOTING
+---------------
+Build fails:
+- Check build logs in Netlify dashboard
+- Ensure package.json has correct build script
+- Verify all dependencies are listed
+
+API routes not working:
+- Netlify Functions handle Next.js API routes automatically
+- Check Functions tab in Netlify dashboard for logs
+
+Page not found errors:
+- Netlify handles Next.js routing automatically
+- If issues persist, add a netlify.toml file (see below)
+
+
+OPTIONAL: netlify.toml
+----------------------
+Create this file in your project root for explicit configuration:
+
+  [build]
+    command = "npm run build"
+    publish = ".next"
+
+  [[plugins]]
+    package = "@netlify/plugin-nextjs"
+
+
+USEFUL LINKS
+------------
+- Netlify Next.js docs: https://docs.netlify.com/frameworks/next-js/overview/
+- Netlify dashboard: https://app.netlify.com
+- Build logs: Site dashboard > Deploys > Click any deploy
