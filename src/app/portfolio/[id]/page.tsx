@@ -368,7 +368,7 @@ export default function PortfolioDetailPage() {
                 </div>
                 <div className="mb-4">
                   <DateRangePicker
-                    minDate={portfolioMinDate}
+                    portfolioCreatedDate={portfolioMinDate}
                     startDate={dateRangeStart}
                     endDate={dateRangeEnd}
                     onChange={handleDateRangeChange}

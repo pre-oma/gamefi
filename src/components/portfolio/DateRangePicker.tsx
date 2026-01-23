@@ -5,7 +5,7 @@ import { format, subDays, subMonths, subYears, startOfDay, endOfDay } from 'date
 import { cn } from '@/lib/utils';
 
 interface DateRangePickerProps {
-  minDate: Date;
+  portfolioCreatedDate: Date;
   maxDate?: Date;
   startDate: Date | null;
   endDate: Date | null;
@@ -24,7 +24,7 @@ const PRESETS: { key: PresetKey; label: string }[] = [
 ];
 
 export const DateRangePicker: React.FC<DateRangePickerProps> = ({
-  minDate,
+  portfolioCreatedDate,
   maxDate = new Date(),
   startDate,
   endDate,
@@ -34,6 +34,9 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
   const [showCustom, setShowCustom] = useState(false);
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+
+  // Allow dates up to 2 years before portfolio creation for historical view
+  const absoluteMinDate = subYears(portfolioCreatedDate, 2);
 
   // Initialize custom date inputs when dates change
   useEffect(() => {
@@ -69,13 +72,8 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
         break;
       case 'ALL':
       default:
-        start = startOfDay(minDate);
+        start = startOfDay(portfolioCreatedDate);
         break;
-    }
-
-    // Ensure start date is not before minDate
-    if (start < minDate) {
-      start = startOfDay(minDate);
     }
 
     onChange(start, today);
@@ -88,7 +86,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
 
     if (value) {
       const newStart = startOfDay(new Date(value));
-      if (newStart >= minDate && newStart <= maxDate) {
+      if (newStart <= maxDate) {
         onChange(newStart, endDate || maxDate);
       }
     }
@@ -101,8 +99,8 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
 
     if (value) {
       const newEnd = endOfDay(new Date(value));
-      if (newEnd >= minDate && newEnd <= maxDate) {
-        onChange(startDate || minDate, newEnd);
+      if (newEnd <= maxDate) {
+        onChange(startDate || portfolioCreatedDate, newEnd);
       }
     }
   };
@@ -110,7 +108,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
   const handleReset = () => {
     setActivePreset('ALL');
     setShowCustom(false);
-    onChange(startOfDay(minDate), endOfDay(maxDate));
+    onChange(startOfDay(portfolioCreatedDate), endOfDay(maxDate));
   };
 
   return (
@@ -149,13 +147,13 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
 
       {/* Custom Date Range Inputs */}
       {showCustom && (
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
             <label className="text-xs text-slate-500">From:</label>
             <input
               type="date"
               value={customStart}
-              min={format(minDate, 'yyyy-MM-dd')}
+              min={format(absoluteMinDate, 'yyyy-MM-dd')}
               max={format(maxDate, 'yyyy-MM-dd')}
               onChange={handleCustomStartChange}
               className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500"
@@ -166,7 +164,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
             <input
               type="date"
               value={customEnd}
-              min={format(minDate, 'yyyy-MM-dd')}
+              min={format(absoluteMinDate, 'yyyy-MM-dd')}
               max={format(maxDate, 'yyyy-MM-dd')}
               onChange={handleCustomEndChange}
               className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500"
