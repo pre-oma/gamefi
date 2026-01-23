@@ -121,7 +121,8 @@ export async function GET(request: NextRequest) {
 
     const meta = data.chart.result[0].meta;
 
-    if (!meta.regularMarketPrice) {
+    // Allow price = 0 for inactive/delisted tickers, only reject if undefined
+    if (meta.regularMarketPrice === undefined || meta.regularMarketPrice === null) {
       return NextResponse.json(
         { success: false, error: 'No price data available for this symbol' },
         { status: 404 }
