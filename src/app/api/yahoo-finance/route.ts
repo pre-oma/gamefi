@@ -20,8 +20,14 @@ interface YahooQuoteResult {
 }
 
 interface YahooFinanceResponse {
-  quoteResponse: {
+  quoteResponse?: {
     result: YahooQuoteResult[];
+    error: null | { code: string; description: string };
+  };
+  finance?: {
+    result: Array<{
+      quotes: YahooQuoteResult[];
+    }>;
     error: null | { code: string; description: string };
   };
 }
@@ -53,10 +59,64 @@ function mapYahooToAsset(quote: YahooQuoteResult): Asset {
     marketCap: quote.marketCap || 0,
     beta: quote.beta || 1.0,
     peRatio: quote.trailingPE || null,
-    dividendYield: (quote.dividendYield || 0) * 100, // Convert from decimal to percentage
+    dividendYield: (quote.dividendYield || 0) * 100,
     weekHigh52: quote.fiftyTwoWeekHigh || 0,
     weekLow52: quote.fiftyTwoWeekLow || 0,
   };
+}
+
+async function fetchFromYahoo(symbol: string): Promise<YahooQuoteResult | null> {
+  const endpoints = [
+    // Primary endpoint - v7 quote API
+    `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}`,
+    // Fallback - v6 quote API
+    `https://query2.finance.yahoo.com/v6/finance/quote?symbols=${symbol}`,
+  ];
+
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/json',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Origin': 'https://finance.yahoo.com',
+    'Referer': 'https://finance.yahoo.com/',
+  };
+
+  for (const url of endpoints) {
+    try {
+      const response = await fetch(url, {
+        headers,
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        console.log(`Endpoint ${url} returned ${response.status}, trying next...`);
+        continue;
+      }
+
+      const data: YahooFinanceResponse = await response.json();
+
+      // Handle v7 response format
+      if (data.quoteResponse?.result?.length) {
+        const quote = data.quoteResponse.result[0];
+        if (quote.regularMarketPrice) {
+          return quote;
+        }
+      }
+
+      // Handle v6 response format
+      if (data.finance?.result?.[0]?.quotes?.length) {
+        const quote = data.finance.result[0].quotes[0];
+        if (quote.regularMarketPrice) {
+          return quote;
+        }
+      }
+    } catch (error) {
+      console.log(`Error fetching from ${url}:`, error);
+      continue;
+    }
+  }
+
+  return null;
 }
 
 export async function GET(request: NextRequest) {
@@ -80,54 +140,21 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const yahooUrl = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol.toUpperCase())}`;
+    const quote = await fetchFromYahoo(symbol.toUpperCase());
 
-    const response = await fetch(yahooUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-      },
-      next: { revalidate: 300 }, // Cache for 5 minutes
-    });
-
-    if (!response.ok) {
-      throw new Error(`Yahoo Finance API returned ${response.status}`);
-    }
-
-    const data: YahooFinanceResponse = await response.json();
-
-    if (data.quoteResponse.error) {
+    if (!quote) {
       return NextResponse.json(
-        { success: false, error: data.quoteResponse.error.description },
-        { status: 400 }
-      );
-    }
-
-    const results = data.quoteResponse.result;
-
-    if (!results || results.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'Symbol not found' },
-        { status: 404 }
-      );
-    }
-
-    const quote = results[0];
-
-    // Check if we got a valid quote with price data
-    if (!quote.regularMarketPrice) {
-      return NextResponse.json(
-        { success: false, error: 'No price data available for this symbol' },
+        { success: false, error: 'Symbol not found or no data available' },
         { status: 404 }
       );
     }
 
     const asset = mapYahooToAsset(quote);
-
     return NextResponse.json({ success: true, asset });
   } catch (error) {
     console.error('Yahoo Finance API error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch data from Yahoo Finance' },
+      { success: false, error: 'Failed to fetch data from Yahoo Finance. The service may be temporarily unavailable.' },
       { status: 500 }
     );
   }
