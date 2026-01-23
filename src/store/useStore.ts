@@ -451,15 +451,15 @@ export const useStore = create<AppState>((set, get) => ({
     const updatedCurrentUser = {
       ...currentUser,
       following: [...currentUser.following, targetUserId],
-      xp: currentUser.xp + 10,
     };
     userStorage.saveUser(updatedCurrentUser);
     userStorage.setCurrentUser(updatedCurrentUser);
 
-    // Update target user's followers
+    // Update target user's followers and award +100 XP
     const updatedTargetUser = {
       ...targetUser,
       followers: [...targetUser.followers, currentUser.id],
+      xp: targetUser.xp + 100,
     };
     userStorage.saveUser(updatedTargetUser);
 
@@ -481,7 +481,7 @@ export const useStore = create<AppState>((set, get) => ({
       id: uuidv4(),
       userId: targetUserId,
       type: 'new_follower',
-      message: `${currentUser.username} started following you`,
+      message: `${currentUser.username} started following you (+100 XP!)`,
       read: false,
       createdAt: new Date().toISOString(),
     };

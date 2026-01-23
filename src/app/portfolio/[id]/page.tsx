@@ -17,7 +17,7 @@ import {
 } from 'recharts';
 import { useStore } from '@/store/useStore';
 import { portfolioStorage, userStorage } from '@/lib/storage';
-import { Header, Button, FormationField, AssetSelector, Modal } from '@/components';
+import { Header, Button, FormationField, AssetSelector, Modal, DateRangePicker } from '@/components';
 import { Position, PortfolioPlayer, Portfolio } from '@/types';
 import {
   cn,
@@ -25,6 +25,7 @@ import {
   formatPercent,
   formatDate,
   calculatePortfolioPerformance,
+  calculatePortfolioPerformanceForDateRange,
   exportPortfolioToCSV,
   getShareUrl,
   copyToClipboard,
@@ -44,6 +45,8 @@ export default function PortfolioDetailPage() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [dateRangeStart, setDateRangeStart] = useState<Date | null>(null);
+  const [dateRangeEnd, setDateRangeEnd] = useState<Date | null>(null);
 
   useEffect(() => {
     loadData();
@@ -60,8 +63,21 @@ export default function PortfolioDetailPage() {
 
   const performance = useMemo(() => {
     if (!portfolio) return null;
+    if (dateRangeStart && dateRangeEnd) {
+      return calculatePortfolioPerformanceForDateRange(portfolio, dateRangeStart, dateRangeEnd);
+    }
     return calculatePortfolioPerformance(portfolio);
+  }, [portfolio, dateRangeStart, dateRangeEnd]);
+
+  const portfolioMinDate = useMemo(() => {
+    if (!portfolio) return new Date();
+    return new Date(portfolio.createdAt);
   }, [portfolio]);
+
+  const handleDateRangeChange = (start: Date | null, end: Date | null) => {
+    setDateRangeStart(start);
+    setDateRangeEnd(end);
+  };
 
   const sectorData = useMemo(() => {
     if (!portfolio) return [];
@@ -347,7 +363,17 @@ export default function PortfolioDetailPage() {
                 transition={{ delay: 0.3 }}
                 className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6"
               >
-                <h2 className="text-lg font-semibold text-white mb-4">Performance History</h2>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                  <h2 className="text-lg font-semibold text-white">Performance History</h2>
+                </div>
+                <div className="mb-4">
+                  <DateRangePicker
+                    minDate={portfolioMinDate}
+                    startDate={dateRangeStart}
+                    endDate={dateRangeEnd}
+                    onChange={handleDateRangeChange}
+                  />
+                </div>
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={performance.historicalData.slice(-30)}>

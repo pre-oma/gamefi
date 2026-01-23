@@ -198,6 +198,127 @@ export const calculatePortfolioPerformance = (portfolio: Portfolio): PortfolioPe
   };
 };
 
+// Calculate portfolio performance for a specific date range
+export const calculatePortfolioPerformanceForDateRange = (
+  portfolio: Portfolio,
+  startDate: Date,
+  endDate: Date
+): PortfolioPerformance => {
+  const fullHistory = generatePortfolioHistory(portfolio);
+  const startDateStr = format(startDate, 'yyyy-MM-dd');
+  const endDateStr = format(endDate, 'yyyy-MM-dd');
+
+  // Filter history to the date range
+  const filteredHistory = fullHistory.filter((h) => {
+    return h.date >= startDateStr && h.date <= endDateStr;
+  });
+
+  // If no data in range, return default performance
+  if (filteredHistory.length === 0) {
+    return calculatePortfolioPerformance(portfolio);
+  }
+
+  const startValue = filteredHistory[0].value;
+  const currentValue = filteredHistory[filteredHistory.length - 1].value;
+  const initialValue = 10000;
+
+  // Calculate beta (simplified - average of asset betas)
+  const assetsWithBeta = portfolio.players.filter((p) => p.asset?.beta).map((p) => p.asset!.beta);
+  const avgBeta = assetsWithBeta.length > 0
+    ? assetsWithBeta.reduce((a, b) => a + b, 0) / assetsWithBeta.length
+    : 1;
+
+  // Calculate daily returns for the filtered period
+  const dailyReturns = filteredHistory.length > 1
+    ? filteredHistory.slice(1).map((h, i) => (h.value - filteredHistory[i].value) / filteredHistory[i].value)
+    : [0];
+
+  // Calculate volatility (annualized from daily returns in period)
+  const avgReturn = dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length;
+  const variance = dailyReturns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / dailyReturns.length;
+  const volatility = Math.sqrt(variance) * Math.sqrt(252) * 100; // Annualized
+
+  // Period return (start to end value)
+  const periodReturn = currentValue - startValue;
+  const periodReturnPercent = ((currentValue - startValue) / startValue) * 100;
+
+  // Annualized return calculation for Sharpe ratio
+  const daysInPeriod = filteredHistory.length;
+  const annualizedReturn = daysInPeriod > 0
+    ? (Math.pow(currentValue / startValue, 365 / daysInPeriod) - 1) * 100
+    : 0;
+
+  // Simplified Sharpe ratio (assuming risk-free rate of 4%)
+  const sharpeRatio = volatility > 0 ? (annualizedReturn - 4) / volatility : 0;
+
+  // Max drawdown within the period
+  let maxDrawdown = 0;
+  let peak = filteredHistory[0].value;
+  for (const point of filteredHistory) {
+    if (point.value > peak) peak = point.value;
+    const drawdown = (peak - point.value) / peak;
+    if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+  }
+
+  // Win rate (positive days in period)
+  const winDays = dailyReturns.filter((r) => r > 0).length;
+  const winRate = dailyReturns.length > 0 ? (winDays / dailyReturns.length) * 100 : 0;
+
+  // Calculate day-over-day metrics from filtered data
+  const dayAgoIdx = filteredHistory.length - 2;
+  const twoDaysAgoIdx = filteredHistory.length - 3;
+  const weekAgoIdx = filteredHistory.length - 8;
+  const twoWeeksAgoIdx = filteredHistory.length - 15;
+  const monthAgoIdx = filteredHistory.length - 31;
+
+  const dayAgoValue = dayAgoIdx >= 0 ? filteredHistory[dayAgoIdx].value : startValue;
+  const twoDaysAgoValue = twoDaysAgoIdx >= 0 ? filteredHistory[twoDaysAgoIdx].value : startValue;
+  const weekAgoValue = weekAgoIdx >= 0 ? filteredHistory[weekAgoIdx].value : startValue;
+  const twoWeeksAgoValue = twoWeeksAgoIdx >= 0 ? filteredHistory[twoWeeksAgoIdx].value : startValue;
+  const monthAgoValue = monthAgoIdx >= 0 ? filteredHistory[monthAgoIdx].value : startValue;
+  const yearAgoValue = filteredHistory[0].value;
+
+  // Day-over-day comparison calculations
+  const todayChange = ((currentValue - dayAgoValue) / dayAgoValue) * 100;
+  const yesterdayChange = ((dayAgoValue - twoDaysAgoValue) / twoDaysAgoValue) * 100;
+  const dayVsPreviousDay = todayChange - yesterdayChange;
+
+  const thisWeekChange = ((currentValue - weekAgoValue) / weekAgoValue) * 100;
+  const lastWeekChange = ((weekAgoValue - twoWeeksAgoValue) / twoWeeksAgoValue) * 100;
+  const weekVsPreviousWeek = thisWeekChange - lastWeekChange;
+
+  const isImproving = dayVsPreviousDay > 0;
+
+  return {
+    portfolioId: portfolio.id,
+    totalValue: currentValue,
+    totalReturn: periodReturn,
+    totalReturnPercent: periodReturnPercent,
+    dayReturn: currentValue - dayAgoValue,
+    dayReturnPercent: ((currentValue - dayAgoValue) / dayAgoValue) * 100,
+    weekReturn: currentValue - weekAgoValue,
+    weekReturnPercent: ((currentValue - weekAgoValue) / weekAgoValue) * 100,
+    monthReturn: currentValue - monthAgoValue,
+    monthReturnPercent: ((currentValue - monthAgoValue) / monthAgoValue) * 100,
+    yearReturn: currentValue - yearAgoValue,
+    yearReturnPercent: ((currentValue - yearAgoValue) / yearAgoValue) * 100,
+    beta: avgBeta,
+    sharpeRatio: isNaN(sharpeRatio) ? 0 : sharpeRatio,
+    volatility: isNaN(volatility) ? 0 : volatility,
+    maxDrawdown: maxDrawdown * 100,
+    winRate: isNaN(winRate) ? 0 : winRate,
+    historicalData: filteredHistory.map((h) => ({
+      date: h.date,
+      value: h.value,
+      return: ((h.value - startValue) / startValue) * 100,
+    })),
+    // Day-over-day comparison fields
+    dayVsPreviousDay: isNaN(dayVsPreviousDay) ? 0 : dayVsPreviousDay,
+    weekVsPreviousWeek: isNaN(weekVsPreviousWeek) ? 0 : weekVsPreviousWeek,
+    isImproving,
+  };
+};
+
 // Get leaderboard entries
 export const getLeaderboardEntries = (
   period: 'day' | 'week' | 'month' | 'year' | 'all' = 'month',

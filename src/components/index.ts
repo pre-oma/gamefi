@@ -12,6 +12,10 @@ export { RegisterForm } from './auth/RegisterForm';
 export { FormationField } from './portfolio/FormationField';
 export { AssetSelector } from './portfolio/AssetSelector';
 export { PortfolioCard } from './portfolio/PortfolioCard';
+export { DateRangePicker } from './portfolio/DateRangePicker';
 
 // Leaderboard Components
 export { LeaderboardTable } from './leaderboard/LeaderboardTable';
+
+// Compare Components
+export * from './compare';
