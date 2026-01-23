@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Asset } from '@/types';
-import { searchAllAssets, getAssetBySymbol } from '@/data/assets';
+import { searchAllAssets, getAssetBySymbolFromAll } from '@/data/assets';
 import { fetchAssetFromYahoo } from '@/lib/yahooFinance';
 
 interface UseAssetSearchResult {
@@ -32,7 +32,7 @@ export function useAssetSearch(initialTerm: string = ''): UseAssetSearchResult {
     // Clear previous error
     setError(null);
 
-    // If empty search, return all assets
+    // If empty search, return empty results
     if (!normalizedTerm) {
       setResults([]);
       setIsLoading(false);
@@ -42,49 +42,51 @@ export function useAssetSearch(initialTerm: string = ''): UseAssetSearchResult {
     setIsLoading(true);
 
     try {
-      // First, search local assets
+      // Check if the search term looks like a stock symbol (letters only, 1-5 chars)
+      const isLikelySymbol = /^[A-Za-z]{1,5}$/.test(normalizedTerm);
+
+      // First, check for exact symbol match locally
+      const exactLocalMatch = getAssetBySymbolFromAll(normalizedTerm);
+
+      // Search local assets for partial matches
       const localResults = searchAllAssets(normalizedTerm);
 
       // Check if search term has changed while we were processing
       if (latestSearchRef.current !== normalizedTerm) return;
 
-      // If we have local results, show them
-      if (localResults.length > 0) {
-        setResults(localResults);
+      // If we have an exact local symbol match, prioritize it
+      if (exactLocalMatch) {
+        // Put exact match first, then other local results (excluding the exact match)
+        const otherResults = localResults.filter(a => a.id !== exactLocalMatch.id);
+        setResults([exactLocalMatch, ...otherResults]);
         setIsLoading(false);
         return;
       }
 
-      // Check if the search term looks like a stock symbol (all caps, 1-5 chars)
-      const isLikelySymbol = /^[A-Za-z]{1,5}$/.test(normalizedTerm);
-
-      // If no local results and looks like a symbol, try Yahoo Finance
+      // If it looks like a symbol and no exact local match, try Yahoo Finance
       if (isLikelySymbol) {
-        // First check if we already have this asset cached
-        const existingAsset = getAssetBySymbol(normalizedTerm);
-        if (existingAsset) {
-          setResults([existingAsset]);
-          setIsLoading(false);
-          return;
-        }
-
-        // Try fetching from Yahoo Finance
         const yahooResponse = await fetchAssetFromYahoo(normalizedTerm);
 
         // Check if search term has changed while we were fetching
         if (latestSearchRef.current !== normalizedTerm) return;
 
         if (yahooResponse.success && yahooResponse.asset) {
-          setResults([yahooResponse.asset]);
+          // Combine Yahoo result with local partial matches
+          // Put Yahoo result first since it's an exact symbol match
+          const otherResults = localResults.filter(
+            a => a.symbol.toUpperCase() !== yahooResponse.asset!.symbol.toUpperCase()
+          );
+          setResults([yahooResponse.asset, ...otherResults]);
         } else {
-          setResults([]);
-          if (yahooResponse.error && yahooResponse.error !== 'Symbol not found') {
+          // Yahoo didn't find anything, show local partial matches
+          setResults(localResults);
+          if (localResults.length === 0 && yahooResponse.error && yahooResponse.error !== 'Symbol not found') {
             setError(yahooResponse.error);
           }
         }
       } else {
-        // Not a symbol-like search, just show no results
-        setResults([]);
+        // Not a symbol-like search, just show local results
+        setResults(localResults);
       }
     } catch (err) {
       if (latestSearchRef.current === normalizedTerm) {
