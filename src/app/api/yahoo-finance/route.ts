@@ -1,39 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Asset, AssetType } from '@/types';
 
-interface YahooQuoteResult {
+interface YahooChartMeta {
+  currency: string;
   symbol: string;
-  shortName?: string;
+  instrumentType: string;
+  regularMarketPrice: number;
+  chartPreviousClose: number;
+  fiftyTwoWeekHigh: number;
+  fiftyTwoWeekLow: number;
+  regularMarketDayHigh: number;
+  regularMarketDayLow: number;
+  regularMarketVolume: number;
   longName?: string;
-  quoteType?: string;
-  sector?: string;
-  regularMarketPrice?: number;
-  regularMarketPreviousClose?: number;
-  regularMarketChange?: number;
-  regularMarketChangePercent?: number;
-  marketCap?: number;
-  beta?: number;
-  trailingPE?: number;
-  dividendYield?: number;
-  fiftyTwoWeekHigh?: number;
-  fiftyTwoWeekLow?: number;
+  shortName?: string;
 }
 
-interface YahooFinanceResponse {
-  quoteResponse?: {
-    result: YahooQuoteResult[];
-    error: null | { code: string; description: string };
-  };
-  finance?: {
+interface YahooChartResponse {
+  chart: {
     result: Array<{
-      quotes: YahooQuoteResult[];
-    }>;
+      meta: YahooChartMeta;
+    }> | null;
     error: null | { code: string; description: string };
   };
 }
 
-function mapQuoteTypeToAssetType(quoteType?: string): AssetType {
-  switch (quoteType?.toUpperCase()) {
+function mapInstrumentTypeToAssetType(instrumentType?: string): AssetType {
+  switch (instrumentType?.toUpperCase()) {
     case 'EQUITY':
       return 'stock';
     case 'ETF':
@@ -45,78 +38,29 @@ function mapQuoteTypeToAssetType(quoteType?: string): AssetType {
   }
 }
 
-function mapYahooToAsset(quote: YahooQuoteResult): Asset {
+function mapChartToAsset(meta: YahooChartMeta): Asset {
+  const currentPrice = meta.regularMarketPrice || 0;
+  const previousClose = meta.chartPreviousClose || 0;
+  const dayChange = currentPrice - previousClose;
+  const dayChangePercent = previousClose > 0 ? (dayChange / previousClose) * 100 : 0;
+
   return {
-    id: quote.symbol.toLowerCase(),
-    symbol: quote.symbol.toUpperCase(),
-    name: quote.shortName || quote.longName || quote.symbol,
-    type: mapQuoteTypeToAssetType(quote.quoteType),
-    sector: quote.sector || 'Other',
-    currentPrice: quote.regularMarketPrice || 0,
-    previousClose: quote.regularMarketPreviousClose || 0,
-    dayChange: quote.regularMarketChange || 0,
-    dayChangePercent: quote.regularMarketChangePercent || 0,
-    marketCap: quote.marketCap || 0,
-    beta: quote.beta || 1.0,
-    peRatio: quote.trailingPE || null,
-    dividendYield: (quote.dividendYield || 0) * 100,
-    weekHigh52: quote.fiftyTwoWeekHigh || 0,
-    weekLow52: quote.fiftyTwoWeekLow || 0,
+    id: meta.symbol.toLowerCase(),
+    symbol: meta.symbol.toUpperCase(),
+    name: meta.longName || meta.shortName || meta.symbol,
+    type: mapInstrumentTypeToAssetType(meta.instrumentType),
+    sector: 'Other', // Chart API doesn't provide sector
+    currentPrice,
+    previousClose,
+    dayChange,
+    dayChangePercent,
+    marketCap: 0, // Not available in chart API
+    beta: 1.0, // Not available in chart API
+    peRatio: null, // Not available in chart API
+    dividendYield: 0, // Not available in chart API
+    weekHigh52: meta.fiftyTwoWeekHigh || 0,
+    weekLow52: meta.fiftyTwoWeekLow || 0,
   };
-}
-
-async function fetchFromYahoo(symbol: string): Promise<YahooQuoteResult | null> {
-  const endpoints = [
-    // Primary endpoint - v7 quote API
-    `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}`,
-    // Fallback - v6 quote API
-    `https://query2.finance.yahoo.com/v6/finance/quote?symbols=${symbol}`,
-  ];
-
-  const headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'application/json',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Origin': 'https://finance.yahoo.com',
-    'Referer': 'https://finance.yahoo.com/',
-  };
-
-  for (const url of endpoints) {
-    try {
-      const response = await fetch(url, {
-        headers,
-        cache: 'no-store',
-      });
-
-      if (!response.ok) {
-        console.log(`Endpoint ${url} returned ${response.status}, trying next...`);
-        continue;
-      }
-
-      const data: YahooFinanceResponse = await response.json();
-
-      // Handle v7 response format
-      if (data.quoteResponse?.result?.length) {
-        const quote = data.quoteResponse.result[0];
-        if (quote.regularMarketPrice) {
-          return quote;
-        }
-      }
-
-      // Handle v6 response format
-      if (data.finance?.result?.[0]?.quotes?.length) {
-        const quote = data.finance.result[0].quotes[0];
-        if (quote.regularMarketPrice) {
-          return quote;
-        }
-      }
-    } catch (error) {
-      console.log(`Error fetching from ${url}:`, error);
-      continue;
-    }
-  }
-
-  return null;
 }
 
 export async function GET(request: NextRequest) {
@@ -140,21 +84,56 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const quote = await fetchFromYahoo(symbol.toUpperCase());
+    const upperSymbol = symbol.toUpperCase();
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(upperSymbol)}?interval=1d&range=1d`;
 
-    if (!quote) {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      console.error(`Yahoo Finance API returned ${response.status}`);
       return NextResponse.json(
-        { success: false, error: 'Symbol not found or no data available' },
+        { success: false, error: 'Symbol not found' },
         { status: 404 }
       );
     }
 
-    const asset = mapYahooToAsset(quote);
+    const data: YahooChartResponse = await response.json();
+
+    if (data.chart.error) {
+      console.error('Yahoo Finance API error:', data.chart.error);
+      return NextResponse.json(
+        { success: false, error: data.chart.error.description || 'Symbol not found' },
+        { status: 404 }
+      );
+    }
+
+    if (!data.chart.result || data.chart.result.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Symbol not found' },
+        { status: 404 }
+      );
+    }
+
+    const meta = data.chart.result[0].meta;
+
+    if (!meta.regularMarketPrice) {
+      return NextResponse.json(
+        { success: false, error: 'No price data available for this symbol' },
+        { status: 404 }
+      );
+    }
+
+    const asset = mapChartToAsset(meta);
     return NextResponse.json({ success: true, asset });
   } catch (error) {
     console.error('Yahoo Finance API error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch data from Yahoo Finance. The service may be temporarily unavailable.' },
+      { success: false, error: 'Failed to fetch data from Yahoo Finance' },
       { status: 500 }
     );
   }
