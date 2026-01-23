@@ -274,3 +274,30 @@ export interface ApiResponse<T> {
   data?: T;
   error?: string;
 }
+
+// Authentication Types
+export interface UserCredentials {
+  id: string;
+  userId: string;
+  passwordHash: string;
+  salt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AuthResponse {
+  success: boolean;
+  user?: User;
+  error?: string;
+}
+
+export interface RegisterRequest {
+  username: string;
+  email: string;
+  password: string;
+}
+
+export interface LoginRequest {
+  identifier: string; // username or email
+  password: string;
+}

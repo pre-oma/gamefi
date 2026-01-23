@@ -1,4 +1,4 @@
-import { User, Portfolio, Activity, Notification, Reward } from '@/types';
+import { User, Portfolio, Activity, Notification, Reward, UserCredentials } from '@/types';
 
 const KEYS = {
   CURRENT_USER: 'gamefi-current-user',
@@ -7,6 +7,7 @@ const KEYS = {
   ACTIVITIES: 'gamefi-activities',
   NOTIFICATIONS: 'gamefi-notifications',
   REWARDS: 'gamefi-rewards',
+  CREDENTIALS: 'gamefi-credentials',
 };
 
 // Generic storage helpers
@@ -54,6 +55,15 @@ export const userStorage = {
 
   getUserByUsername: (username: string): User | undefined => {
     return userStorage.getAllUsers().find((u) => u.username.toLowerCase() === username.toLowerCase());
+  },
+
+  getUserByEmail: (email: string): User | undefined => {
+    return userStorage.getAllUsers().find((u) => u.email.toLowerCase() === email.toLowerCase());
+  },
+
+  deleteUser: (id: string): void => {
+    const users = userStorage.getAllUsers().filter((u) => u.id !== id);
+    setItem(KEYS.USERS, users);
   },
 };
 
@@ -143,6 +153,31 @@ export const rewardStorage = {
   add: (userId: string, reward: Reward): void => {
     const rewards = [...getItem<Reward[]>(KEYS.REWARDS, []), { ...reward, id: `${userId}-${reward.id}` }];
     setItem(KEYS.REWARDS, rewards);
+  },
+};
+
+// Credential storage
+export const credentialStorage = {
+  getAll: (): UserCredentials[] => getItem<UserCredentials[]>(KEYS.CREDENTIALS, []),
+
+  save: (credentials: UserCredentials): void => {
+    const all = credentialStorage.getAll();
+    const index = all.findIndex((c) => c.id === credentials.id);
+    if (index >= 0) {
+      all[index] = credentials;
+    } else {
+      all.push(credentials);
+    }
+    setItem(KEYS.CREDENTIALS, all);
+  },
+
+  getByUserId: (userId: string): UserCredentials | undefined => {
+    return credentialStorage.getAll().find((c) => c.userId === userId);
+  },
+
+  deleteByUserId: (userId: string): void => {
+    const all = credentialStorage.getAll().filter((c) => c.userId !== userId);
+    setItem(KEYS.CREDENTIALS, all);
   },
 };
 

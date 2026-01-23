@@ -5,37 +5,35 @@ import { motion } from 'framer-motion';
 import { useStore } from '@/store/useStore';
 import { Button, Input } from '@/components/ui';
 
-interface LoginFormProps {
-  onSwitchToRegister: () => void;
+interface RegisterFormProps {
+  onSwitchToLogin: () => void;
 }
 
-export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
-  const [identifier, setIdentifier] = useState('');
+export const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchToLogin }) => {
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const { login } = useStore();
+  const { register } = useStore();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!identifier.trim()) {
-      setError('Please enter your username or email');
-      return;
-    }
-
-    if (!password) {
-      setError('Please enter your password');
+    // Validate confirm password
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const result = await login(identifier, password);
+      const result = await register(username, email, password);
       if (!result.success) {
-        setError(result.error || 'Login failed');
+        setError(result.error || 'Registration failed');
       }
     } catch {
       setError('An unexpected error occurred');
@@ -71,15 +69,15 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
             </svg>
           </motion.div>
           <h1 className="text-3xl font-bold text-white mb-2">Gamefi Invest</h1>
-          <p className="text-slate-400">Build your investment dream team</p>
+          <p className="text-slate-400">Create your account</p>
         </div>
 
-        {/* Login Card */}
+        {/* Register Card */}
         <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-2xl p-8 shadow-2xl">
           <div className="mb-6">
-            <h2 className="text-xl font-semibold text-white mb-2">Welcome Back</h2>
+            <h2 className="text-xl font-semibold text-white mb-2">Sign Up</h2>
             <p className="text-slate-400 text-sm">
-              Sign in with your username or email and password.
+              Create an account to start building your investment dream team.
             </p>
           </div>
 
@@ -91,10 +89,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              label="Username or Email"
-              placeholder="Enter your username or email"
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
+              label="Username"
+              placeholder="Choose a username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               leftIcon={
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -103,14 +101,40 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
             />
 
             <Input
+              label="Email"
+              type="email"
+              placeholder="Enter your email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              leftIcon={
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              }
+            />
+
+            <Input
               label="Password"
               type="password"
-              placeholder="Enter your password"
+              placeholder="Create a password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               leftIcon={
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              }
+            />
+
+            <Input
+              label="Confirm Password"
+              type="password"
+              placeholder="Confirm your password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              leftIcon={
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                 </svg>
               }
             />
@@ -121,42 +145,21 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
               size="lg"
               isLoading={isLoading}
             >
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              {isLoading ? 'Creating Account...' : 'Create Account'}
             </Button>
           </form>
 
-          {/* Switch to Register */}
+          {/* Switch to Login */}
           <div className="mt-6 pt-6 border-t border-slate-800 text-center">
             <p className="text-slate-400 text-sm">
-              Don&apos;t have an account?{' '}
+              Already have an account?{' '}
               <button
-                onClick={onSwitchToRegister}
+                onClick={onSwitchToLogin}
                 className="text-emerald-400 hover:text-emerald-300 font-medium transition-colors"
               >
-                Create one
+                Sign in
               </button>
             </p>
-          </div>
-
-          {/* Features Preview */}
-          <div className="mt-6 pt-6 border-t border-slate-800">
-            <p className="text-xs text-slate-500 text-center mb-4">What you can do:</p>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { icon: '🎮', text: 'Build Teams' },
-                { icon: '📊', text: 'Track Performance' },
-                { icon: '🏆', text: 'Compete' },
-                { icon: '👥', text: 'Social Trading' },
-              ].map((feature, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-2 p-2 bg-slate-800/50 rounded-lg"
-                >
-                  <span className="text-lg">{feature.icon}</span>
-                  <span className="text-xs text-slate-300">{feature.text}</span>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
 

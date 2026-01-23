@@ -1,13 +1,16 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
-import { LoginForm } from '@/components';
+import { LoginForm, RegisterForm } from '@/components';
+
+type AuthView = 'login' | 'register';
 
 export default function Home() {
   const router = useRouter();
   const { isAuthenticated, isLoading, loadData } = useStore();
+  const [authView, setAuthView] = useState<AuthView>('login');
 
   useEffect(() => {
     loadData();
@@ -41,5 +44,9 @@ export default function Home() {
     );
   }
 
-  return <LoginForm />;
+  return authView === 'login' ? (
+    <LoginForm onSwitchToRegister={() => setAuthView('register')} />
+  ) : (
+    <RegisterForm onSwitchToLogin={() => setAuthView('login')} />
+  );
 }

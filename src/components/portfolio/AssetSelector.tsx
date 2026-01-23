@@ -3,9 +3,10 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Asset, Position, POSITION_RISK_MAP, RiskLevel, getAssetRiskLevel } from '@/types';
-import { MOCK_ASSETS, SECTORS, searchAssets } from '@/data/assets';
+import { MOCK_ASSETS, SECTORS, addExternalAsset } from '@/data/assets';
 import { cn, formatCurrency, formatPercent, formatNumber } from '@/lib/utils';
 import { Input, Button, Modal } from '@/components/ui';
+import { useAssetSearch } from '@/hooks/useAssetSearch';
 
 const RISK_COLORS: Record<RiskLevel, { bg: string; text: string; badge: string }> = {
   low: { bg: 'bg-blue-500/10', text: 'text-blue-400', badge: 'bg-blue-500' },
@@ -34,20 +35,21 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({
   position,
   currentAsset,
 }) => {
-  const [search, setSearch] = useState('');
   const [selectedSector, setSelectedSector] = useState<string>('All');
   const [selectedType, setSelectedType] = useState<string>('All');
   const [showSuggestedOnly, setShowSuggestedOnly] = useState(false);
 
+  // Use the async search hook
+  const { results: searchResults, isLoading, error, searchTerm, setSearchTerm } = useAssetSearch('');
+
   // Get the risk level for the current position
   const positionRiskLevel = position ? POSITION_RISK_MAP[position.row] : null;
 
+  // Determine which assets to show
   const filteredAssets = useMemo(() => {
-    let assets = MOCK_ASSETS;
-
-    if (search) {
-      assets = searchAssets(search);
-    }
+    // If there's a search term, use search results (which may include Yahoo Finance results)
+    // Otherwise, use the full MOCK_ASSETS list
+    let assets = searchTerm.trim() ? searchResults : MOCK_ASSETS;
 
     if (selectedSector !== 'All') {
       assets = assets.filter((a) => a.sector === selectedSector);
@@ -74,12 +76,18 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({
     }
 
     return assets;
-  }, [search, selectedSector, selectedType, showSuggestedOnly, positionRiskLevel]);
+  }, [searchTerm, searchResults, selectedSector, selectedType, showSuggestedOnly, positionRiskLevel]);
 
   const handleSelect = (asset: Asset) => {
+    // If this asset came from Yahoo Finance (not in MOCK_ASSETS), save it to external assets
+    const isExternal = !MOCK_ASSETS.some((a) => a.id === asset.id);
+    if (isExternal) {
+      addExternalAsset(asset);
+    }
+
     onSelect(asset);
     onClose();
-    setSearch('');
+    setSearchTerm('');
     setSelectedSector('All');
     setSelectedType('All');
   };
@@ -142,12 +150,19 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({
           <div className="flex-1">
             <Input
               placeholder="Search by name, symbol, or sector..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               leftIcon={
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+                isLoading ? (
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                )
               }
             />
           </div>
@@ -177,13 +192,38 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({
           </select>
         </div>
 
+        {/* Error Message */}
+        {error && (
+          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+            <p className="text-sm text-red-400">{error}</p>
+          </div>
+        )}
+
+        {/* Search Hint */}
+        {searchTerm.trim() && filteredAssets.length === 0 && !isLoading && !error && (
+          <div className="p-3 bg-slate-800/50 border border-slate-700 rounded-lg">
+            <p className="text-sm text-slate-400">
+              No local matches found. Try a valid stock ticker (e.g., PLTR, TSLA) to search Yahoo Finance.
+            </p>
+          </div>
+        )}
+
         {/* Asset List */}
         <div className="max-h-[400px] overflow-y-auto space-y-2">
+          {/* Loading State */}
+          {isLoading && searchTerm.trim() && (
+            <div className="py-8 text-center">
+              <div className="w-8 h-8 mx-auto mb-3 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
+              <p className="text-slate-400 text-sm">Searching for &ldquo;{searchTerm}&rdquo;...</p>
+            </div>
+          )}
+
           <AnimatePresence mode="popLayout">
-            {filteredAssets.map((asset) => {
+            {!isLoading && filteredAssets.map((asset) => {
               const assetRiskLevel = getAssetRiskLevel(asset.beta);
               const isMatchingRisk = positionRiskLevel && assetRiskLevel === positionRiskLevel;
               const riskColors = RISK_COLORS[assetRiskLevel];
+              const isExternal = !MOCK_ASSETS.some((a) => a.id === asset.id);
 
               return (
                 <motion.button
@@ -229,6 +269,11 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({
                           Suggested
                         </span>
                       )}
+                      {isExternal && (
+                        <span className="px-2 py-0.5 bg-purple-500/20 rounded text-xs font-medium text-purple-400">
+                          Yahoo
+                        </span>
+                      )}
                     </div>
                     <p className="text-sm text-slate-400 truncate">{asset.name}</p>
                     <p className="text-xs text-slate-500">{asset.sector}</p>
@@ -269,7 +314,7 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({
             })}
           </AnimatePresence>
 
-          {filteredAssets.length === 0 && (
+          {!isLoading && filteredAssets.length === 0 && !searchTerm.trim() && (
             <div className="py-12 text-center text-slate-500">
               <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />

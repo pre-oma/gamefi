@@ -453,3 +453,75 @@ export const searchAssets = (query: string): Asset[] => {
       a.sector.toLowerCase().includes(lowerQuery)
   );
 };
+
+// External assets storage (assets fetched from Yahoo Finance)
+const EXTERNAL_ASSETS_KEY = 'gamefi-external-assets';
+
+const getExternalAssetsFromStorage = (): Asset[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem(EXTERNAL_ASSETS_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveExternalAssetsToStorage = (assets: Asset[]): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(EXTERNAL_ASSETS_KEY, JSON.stringify(assets));
+  } catch {
+    // Ignore storage errors
+  }
+};
+
+// In-memory cache of external assets (synced with localStorage)
+let externalAssetsCache: Asset[] | null = null;
+
+export const getExternalAssets = (): Asset[] => {
+  if (externalAssetsCache === null) {
+    externalAssetsCache = getExternalAssetsFromStorage();
+  }
+  return externalAssetsCache;
+};
+
+export const addExternalAsset = (asset: Asset): void => {
+  const external = getExternalAssets();
+
+  // Check if asset already exists (by symbol)
+  const existingIndex = external.findIndex(
+    (a) => a.symbol.toLowerCase() === asset.symbol.toLowerCase()
+  );
+
+  if (existingIndex >= 0) {
+    // Update existing asset
+    external[existingIndex] = asset;
+  } else {
+    // Add new asset
+    external.push(asset);
+  }
+
+  externalAssetsCache = external;
+  saveExternalAssetsToStorage(external);
+};
+
+export const getAllAssets = (): Asset[] => {
+  return [...MOCK_ASSETS, ...getExternalAssets()];
+};
+
+export const searchAllAssets = (query: string): Asset[] => {
+  const lowerQuery = query.toLowerCase();
+  return getAllAssets().filter(
+    (a) =>
+      a.symbol.toLowerCase().includes(lowerQuery) ||
+      a.name.toLowerCase().includes(lowerQuery) ||
+      a.sector.toLowerCase().includes(lowerQuery)
+  );
+};
+
+export const getAssetBySymbolFromAll = (symbol: string): Asset | undefined => {
+  return getAllAssets().find(
+    (a) => a.symbol.toLowerCase() === symbol.toLowerCase()
+  );
+};

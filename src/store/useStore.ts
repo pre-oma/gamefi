@@ -13,7 +13,8 @@ import {
   Asset,
   FORMATIONS,
 } from '@/types';
-import { userStorage, portfolioStorage, activityStorage, notificationStorage } from '@/lib/storage';
+import { userStorage, portfolioStorage, activityStorage, notificationStorage, credentialStorage } from '@/lib/storage';
+import { AuthResponse, UserCredentials } from '@/types';
 
 interface AppState {
   // Auth state
@@ -28,7 +29,8 @@ interface AppState {
   notifications: Notification[];
 
   // Actions - Auth
-  login: (username: string) => void;
+  login: (identifier: string, password: string) => Promise<AuthResponse>;
+  register: (username: string, email: string, password: string) => Promise<AuthResponse>;
   logout: () => void;
   updateProfile: (updates: Partial<User>) => void;
 
@@ -64,30 +66,88 @@ export const useStore = create<AppState>((set, get) => ({
   notifications: [],
 
   // Auth actions
-  login: (username: string) => {
-    let user = userStorage.getUserByUsername(username);
+  login: async (identifier: string, password: string): Promise<AuthResponse> => {
+    // Find user by username or email
+    const normalizedIdentifier = identifier.toLowerCase().trim();
+    let user = userStorage.getUserByUsername(normalizedIdentifier);
+    if (!user) {
+      user = userStorage.getUserByEmail(normalizedIdentifier);
+    }
 
     if (!user) {
-      // Create new user
-      user = {
-        id: uuidv4(),
-        username: username.toLowerCase(),
-        email: `${username.toLowerCase()}@gamefi.demo`,
-        displayName: username,
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
-        bio: 'New investor on Gamefi Invest!',
-        joinedAt: new Date().toISOString(),
-        followers: [],
-        following: [],
-        portfolios: [],
-        totalRewards: 0,
-        badges: [],
-        level: 1,
-        xp: 0,
-      };
-      userStorage.saveUser(user);
+      return { success: false, error: 'Invalid username/email or password' };
+    }
 
-      // Add activity
+    // Get credentials for user
+    const credentials = credentialStorage.getByUserId(user.id);
+    if (!credentials) {
+      return { success: false, error: 'Invalid username/email or password' };
+    }
+
+    // Call login API to verify password
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identifier,
+          password,
+          storedUser: user,
+          storedCredentials: credentials,
+        }),
+      });
+
+      const result: AuthResponse = await response.json();
+
+      if (result.success && result.user) {
+        userStorage.setCurrentUser(result.user);
+        set({
+          currentUser: result.user,
+          isAuthenticated: true,
+          portfolios: portfolioStorage.getByUserId(result.user.id),
+          notifications: notificationStorage.getByUserId(result.user.id),
+        });
+      }
+
+      return result;
+    } catch {
+      return { success: false, error: 'Login failed. Please try again.' };
+    }
+  },
+
+  register: async (username: string, email: string, password: string): Promise<AuthResponse> => {
+    // Check if username already exists
+    if (userStorage.getUserByUsername(username)) {
+      return { success: false, error: 'Username is already taken' };
+    }
+
+    // Check if email already exists
+    if (userStorage.getUserByEmail(email)) {
+      return { success: false, error: 'Email is already registered' };
+    }
+
+    // Call register API
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, email, password }),
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        return { success: false, error: result.error };
+      }
+
+      const { user, credentials } = result as { user: User; credentials: UserCredentials };
+
+      // Save user and credentials to localStorage
+      userStorage.saveUser(user);
+      credentialStorage.save(credentials);
+      userStorage.setCurrentUser(user);
+
+      // Add welcome activity
       const activity: Activity = {
         id: uuidv4(),
         userId: user.id,
@@ -99,16 +159,18 @@ export const useStore = create<AppState>((set, get) => ({
         timestamp: new Date().toISOString(),
       };
       activityStorage.add(activity);
+
+      set({
+        currentUser: user,
+        isAuthenticated: true,
+        portfolios: [],
+        notifications: [],
+      });
+
+      return { success: true, user };
+    } catch {
+      return { success: false, error: 'Registration failed. Please try again.' };
     }
-
-    userStorage.setCurrentUser(user);
-
-    set({
-      currentUser: user,
-      isAuthenticated: true,
-      portfolios: portfolioStorage.getByUserId(user.id),
-      notifications: notificationStorage.getByUserId(user.id),
-    });
   },
 
   logout: () => {
