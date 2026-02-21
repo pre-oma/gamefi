@@ -1,24 +1,58 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { LeaderboardPeriod, LeaderboardEntry } from '@/types';
-import { getLeaderboardEntries } from '@/lib/utils';
-import { cn, formatCurrency, formatPercent } from '@/lib/utils';
-
-const PERIODS: { value: LeaderboardPeriod; label: string }[] = [
-  { value: 'day', label: '24H' },
-  { value: 'week', label: '7D' },
-  { value: 'month', label: '30D' },
-  { value: 'year', label: '1Y' },
-  { value: 'all', label: 'All Time' },
-];
+import { PortfolioPerformance } from '@/types';
+import { getLeaderboardEntries, cn, formatCurrency, formatPercent, formatDate } from '@/lib/utils';
+import { portfolioStorage } from '@/lib/storage';
+import { fetchMultiplePortfolioPerformances } from '@/hooks/usePortfolioRealPerformance';
 
 export const LeaderboardTable: React.FC = () => {
-  const [period, setPeriod] = useState<LeaderboardPeriod>('month');
+  const [realPerformances, setRealPerformances] = useState<Map<string, { performance: PortfolioPerformance; isRealData: boolean }>>(new Map());
+  const [isLoading, setIsLoading] = useState(false);
 
-  const entries = useMemo(() => getLeaderboardEntries(period, 20), [period]);
+  // Fetch real performance data (always from creation date)
+  useEffect(() => {
+    const publicPortfolios = portfolioStorage.getPublic();
+    if (publicPortfolios.length === 0) return;
+
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        // Always use creation date for calculating returns
+        const performances = await fetchMultiplePortfolioPerformances(publicPortfolios, '1M', true);
+        setRealPerformances(performances);
+      } catch (error) {
+        console.error('Failed to fetch leaderboard performances:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Get entries with real performance data (calculated from creation date)
+  const entries = useMemo(() => {
+    const baseEntries = getLeaderboardEntries('all', 20);
+
+    // Update entries with real performance data
+    return baseEntries.map((entry) => {
+      const realData = realPerformances.get(entry.portfolioId);
+      if (realData?.isRealData) {
+        return {
+          ...entry,
+          value: realData.performance.totalValue,
+          returnPercent: realData.performance.totalReturnPercent,
+        };
+      }
+      return entry;
+    }).sort((a, b) => b.returnPercent - a.returnPercent).map((entry, index) => ({
+      ...entry,
+      rank: index + 1,
+    }));
+  }, [realPerformances]);
 
   const getRankBadge = (rank: number) => {
     if (rank === 1) return { bg: 'bg-yellow-500', text: 'text-yellow-900', icon: '🥇' };
@@ -29,31 +63,14 @@ export const LeaderboardTable: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Period Tabs */}
-      <div className="flex gap-2 p-1 bg-slate-800/50 rounded-xl w-fit">
-        {PERIODS.map((p) => (
-          <button
-            key={p.value}
-            onClick={() => setPeriod(p.value)}
-            className={cn(
-              'px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200',
-              period === p.value
-                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-white'
-            )}
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
-
       {/* Leaderboard */}
       <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden">
         {/* Header */}
         <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-slate-800/50 text-xs font-medium text-slate-400 uppercase tracking-wider">
           <div className="col-span-1">Rank</div>
-          <div className="col-span-5">Investor</div>
-          <div className="col-span-3">Portfolio</div>
+          <div className="col-span-4">Investor</div>
+          <div className="col-span-2">Portfolio</div>
+          <div className="col-span-2 text-center">Created</div>
           <div className="col-span-1 text-right">Value</div>
           <div className="col-span-2 text-right">Return</div>
         </div>
@@ -98,7 +115,7 @@ export const LeaderboardTable: React.FC = () => {
                   </div>
 
                   {/* Investor */}
-                  <div className="col-span-5 flex items-center gap-3 min-w-0">
+                  <div className="col-span-4 flex items-center gap-3 min-w-0">
                     <img
                       src={entry.avatar}
                       alt={entry.username}
@@ -111,7 +128,7 @@ export const LeaderboardTable: React.FC = () => {
                   </div>
 
                   {/* Portfolio */}
-                  <div className="col-span-3 min-w-0">
+                  <div className="col-span-2 min-w-0">
                     <Link
                       href={`/portfolio/${entry.portfolioId}`}
                       className="hover:text-emerald-400 transition-colors"
@@ -121,30 +138,39 @@ export const LeaderboardTable: React.FC = () => {
                     </Link>
                   </div>
 
+                  {/* Created */}
+                  <div className="col-span-2 text-center">
+                    <span className="text-sm text-slate-400">{formatDate(entry.createdAt)}</span>
+                  </div>
+
                   {/* Value */}
                   <div className="col-span-1 text-right">
                     <span className="font-medium text-white">{formatCurrency(entry.value)}</span>
                   </div>
 
-                  {/* Return */}
+                  {/* Return (since creation) */}
                   <div className="col-span-2 text-right">
-                    <span
-                      className={cn(
-                        'inline-flex items-center gap-1 font-bold text-lg',
-                        entry.returnPercent >= 0 ? 'text-emerald-400' : 'text-red-400'
-                      )}
-                    >
-                      {entry.returnPercent >= 0 ? (
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                        </svg>
-                      ) : (
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                        </svg>
-                      )}
-                      {formatPercent(entry.returnPercent, false)}
-                    </span>
+                    {isLoading ? (
+                      <div className="w-16 h-6 bg-slate-700 animate-pulse rounded ml-auto" />
+                    ) : (
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1 font-bold text-lg',
+                          entry.returnPercent >= 0 ? 'text-emerald-400' : 'text-red-400'
+                        )}
+                      >
+                        {entry.returnPercent >= 0 ? (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                          </svg>
+                        )}
+                        {formatPercent(entry.returnPercent, false)}
+                      </span>
+                    )}
                   </div>
                 </motion.div>
               );

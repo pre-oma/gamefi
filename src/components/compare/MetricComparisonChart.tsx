@@ -2,11 +2,12 @@
 
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { PortfolioPerformance } from '@/types';
+import { PortfolioPerformance, BenchmarkPerformance } from '@/types';
 import { formatPercent } from '@/lib/utils';
 
 interface MetricComparisonChartProps {
   performances: { name: string; performance: PortfolioPerformance }[];
+  benchmarks?: BenchmarkPerformance[];
   metricKey: keyof PortfolioPerformance;
   title: string;
   formatValue?: (value: number) => string;
@@ -15,18 +16,56 @@ interface MetricComparisonChartProps {
 
 const CHART_COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b'];
 
+// Map portfolio metrics to benchmark metrics
+const getBenchmarkValue = (
+  benchmark: BenchmarkPerformance,
+  metricKey: keyof PortfolioPerformance
+): number | null => {
+  switch (metricKey) {
+    case 'totalReturnPercent':
+      return benchmark.totalReturnPercent;
+    case 'volatility':
+      return benchmark.volatility;
+    case 'sharpeRatio':
+      return benchmark.sharpeRatio;
+    case 'maxDrawdown':
+      return benchmark.maxDrawdown;
+    default:
+      return null;
+  }
+};
+
 export const MetricComparisonChart: React.FC<MetricComparisonChartProps> = ({
   performances,
+  benchmarks = [],
   metricKey,
   title,
   formatValue = (v) => v.toFixed(2),
   higherIsBetter = true,
 }) => {
-  const data = performances.map((p, index) => ({
+  // Portfolio data
+  const portfolioData = performances.map((p, index) => ({
     name: p.name,
     value: Number(p.performance[metricKey]) || 0,
     color: CHART_COLORS[index % CHART_COLORS.length],
+    isBenchmark: false,
   }));
+
+  // Benchmark data (only include if metric is available)
+  const benchmarkData = benchmarks
+    .map((b) => {
+      const value = getBenchmarkValue(b, metricKey);
+      if (value === null) return null;
+      return {
+        name: b.name,
+        value,
+        color: b.color,
+        isBenchmark: true,
+      };
+    })
+    .filter((d): d is NonNullable<typeof d> => d !== null);
+
+  const data = [...portfolioData, ...benchmarkData];
 
   // Find the best value
   const values = data.map((d) => d.value);
@@ -70,6 +109,9 @@ export const MetricComparisonChart: React.FC<MetricComparisonChartProps> = ({
                   key={index}
                   fill={entry.value === bestValue ? '#10b981' : entry.color}
                   opacity={entry.value === bestValue ? 1 : 0.7}
+                  strokeDasharray={entry.isBenchmark ? '4 2' : undefined}
+                  stroke={entry.isBenchmark ? entry.color : undefined}
+                  strokeWidth={entry.isBenchmark ? 2 : 0}
                 />
               ))}
             </Bar>

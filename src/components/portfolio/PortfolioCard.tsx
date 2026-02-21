@@ -1,14 +1,15 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Portfolio, User } from '@/types';
 import { useStore } from '@/store/useStore';
 import { userStorage } from '@/lib/storage';
-import { cn, formatCurrency, formatPercent, calculatePortfolioPerformance, getRelativeTime } from '@/lib/utils';
+import { cn, formatCurrency, formatPercent, getRelativeTime, formatDate } from '@/lib/utils';
 import { FormationField } from './FormationField';
 import { Button } from '@/components/ui';
+import { usePortfolioRealPerformance } from '@/hooks/usePortfolioRealPerformance';
 
 interface PortfolioCardProps {
   portfolio: Portfolio;
@@ -24,7 +25,8 @@ export const PortfolioCard: React.FC<PortfolioCardProps> = ({
   const { currentUser, likePortfolio, clonePortfolio } = useStore();
   const owner = userStorage.getUserById(portfolio.userId);
 
-  const performance = useMemo(() => calculatePortfolioPerformance(portfolio), [portfolio]);
+  // Use real performance data from Yahoo Finance
+  const { performance, isLoading, isRealData } = usePortfolioRealPerformance(portfolio);
 
   const isOwner = currentUser?.id === portfolio.userId;
   const hasLiked = currentUser ? portfolio.likes.includes(currentUser.id) : false;
@@ -87,25 +89,35 @@ export const PortfolioCard: React.FC<PortfolioCardProps> = ({
 
         {/* Stats */}
         <div className="px-4 pb-2">
-          <div className="grid grid-cols-3 gap-4 py-3 border-t border-slate-800">
+          <div className="grid grid-cols-4 gap-2 py-3 border-t border-slate-800">
             <div className="text-center">
               <p className="text-xs text-slate-500 mb-1">Value</p>
-              <p className="font-semibold text-white">{formatCurrency(performance.totalValue)}</p>
+              <p className="font-semibold text-white text-sm">{formatCurrency(performance.totalValue)}</p>
             </div>
             <div className="text-center">
-              <p className="text-xs text-slate-500 mb-1">Return</p>
-              <p
-                className={cn(
-                  'font-semibold',
-                  performance.totalReturnPercent >= 0 ? 'text-emerald-400' : 'text-red-400'
-                )}
-              >
-                {formatPercent(performance.totalReturnPercent)}
+              <p className="text-xs text-slate-500 mb-1">
+                Return {isRealData && <span className="text-emerald-500">•</span>}
               </p>
+              {isLoading ? (
+                <div className="w-12 h-5 bg-slate-700 animate-pulse rounded mx-auto" />
+              ) : (
+                <p
+                  className={cn(
+                    'font-semibold text-sm',
+                    performance.totalReturnPercent >= 0 ? 'text-emerald-400' : 'text-red-400'
+                  )}
+                >
+                  {formatPercent(performance.totalReturnPercent)}
+                </p>
+              )}
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-slate-500 mb-1">Created</p>
+              <p className="font-semibold text-white text-sm">{formatDate(portfolio.createdAt)}</p>
             </div>
             <div className="text-center">
               <p className="text-xs text-slate-500 mb-1">Players</p>
-              <p className="font-semibold text-white">{filledPositions}/11</p>
+              <p className="font-semibold text-white text-sm">{filledPositions}/11</p>
             </div>
           </div>
         </div>

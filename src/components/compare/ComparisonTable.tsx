@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { PortfolioPerformance } from '@/types';
+import { PortfolioPerformance, BenchmarkPerformance } from '@/types';
 import { cn, formatCurrency, formatPercent } from '@/lib/utils';
 
 interface MetricConfig {
@@ -9,29 +9,32 @@ interface MetricConfig {
   label: string;
   format: (value: number) => string;
   higherIsBetter: boolean;
+  benchmarkKey?: keyof BenchmarkPerformance;
 }
 
 const METRICS: MetricConfig[] = [
   { key: 'totalValue', label: 'Total Value', format: formatCurrency, higherIsBetter: true },
-  { key: 'totalReturnPercent', label: 'Total Return', format: (v) => formatPercent(v), higherIsBetter: true },
+  { key: 'totalReturnPercent', label: 'Total Return', format: (v) => formatPercent(v), higherIsBetter: true, benchmarkKey: 'totalReturnPercent' },
   { key: 'dayReturnPercent', label: 'Day Return', format: (v) => formatPercent(v), higherIsBetter: true },
   { key: 'weekReturnPercent', label: 'Week Return', format: (v) => formatPercent(v), higherIsBetter: true },
   { key: 'monthReturnPercent', label: 'Month Return', format: (v) => formatPercent(v), higherIsBetter: true },
-  { key: 'sharpeRatio', label: 'Sharpe Ratio', format: (v) => v.toFixed(2), higherIsBetter: true },
+  { key: 'sharpeRatio', label: 'Sharpe Ratio', format: (v) => v.toFixed(2), higherIsBetter: true, benchmarkKey: 'sharpeRatio' },
   { key: 'beta', label: 'Beta', format: (v) => v.toFixed(2), higherIsBetter: false },
-  { key: 'volatility', label: 'Volatility', format: (v) => `${v.toFixed(2)}%`, higherIsBetter: false },
-  { key: 'maxDrawdown', label: 'Max Drawdown', format: (v) => `${v.toFixed(2)}%`, higherIsBetter: false },
+  { key: 'volatility', label: 'Volatility', format: (v) => `${v.toFixed(2)}%`, higherIsBetter: false, benchmarkKey: 'volatility' },
+  { key: 'maxDrawdown', label: 'Max Drawdown', format: (v) => `${v.toFixed(2)}%`, higherIsBetter: false, benchmarkKey: 'maxDrawdown' },
   { key: 'winRate', label: 'Win Rate', format: (v) => `${v.toFixed(1)}%`, higherIsBetter: true },
 ];
 
 interface ComparisonTableProps {
   portfolioNames: string[];
   performances: PortfolioPerformance[];
+  benchmarks?: BenchmarkPerformance[];
 }
 
 export const ComparisonTable: React.FC<ComparisonTableProps> = ({
   portfolioNames,
   performances,
+  benchmarks = [],
 }) => {
   const findBestIndex = (metric: MetricConfig): number => {
     if (performances.length === 0) return -1;
@@ -42,6 +45,12 @@ export const ComparisonTable: React.FC<ComparisonTableProps> = ({
       : Math.min(...values);
 
     return values.indexOf(bestValue);
+  };
+
+  const getBenchmarkValue = (benchmark: BenchmarkPerformance, metric: MetricConfig): number | null => {
+    if (!metric.benchmarkKey) return null;
+    const value = benchmark[metric.benchmarkKey];
+    return typeof value === 'number' ? value : null;
   };
 
   return (
@@ -63,6 +72,21 @@ export const ComparisonTable: React.FC<ComparisonTableProps> = ({
                   className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider"
                 >
                   {name}
+                </th>
+              ))}
+              {benchmarks.map((benchmark) => (
+                <th
+                  key={benchmark.symbol}
+                  className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider"
+                  style={{ color: benchmark.color }}
+                >
+                  <div className="flex items-center gap-1">
+                    <span
+                      className="w-2 h-2 rounded-full"
+                      style={{ backgroundColor: benchmark.color }}
+                    />
+                    {benchmark.name}
+                  </div>
                 </th>
               ))}
             </tr>
@@ -94,6 +118,19 @@ export const ComparisonTable: React.FC<ComparisonTableProps> = ({
                             </svg>
                           )}
                         </div>
+                      </td>
+                    );
+                  })}
+                  {/* Benchmark columns */}
+                  {benchmarks.map((benchmark) => {
+                    const value = getBenchmarkValue(benchmark, metric);
+                    return (
+                      <td
+                        key={benchmark.symbol}
+                        className="px-6 py-4 text-sm font-medium"
+                        style={{ color: value !== null ? benchmark.color : '#475569' }}
+                      >
+                        {value !== null ? metric.format(value) : '-'}
                       </td>
                     );
                   })}

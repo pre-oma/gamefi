@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useStore } from '@/store/useStore';
 import { Header, Button, PortfolioCard, Modal, Input } from '@/components';
-import { Formation, FORMATIONS } from '@/types';
+import { Formation, FORMATIONS, PortfolioPerformance } from '@/types';
 import {
   cn,
   formatCurrency,
@@ -15,6 +15,7 @@ import {
   calculatePortfolioPerformance,
   getLeaderboardEntries,
 } from '@/lib/utils';
+import { fetchMultiplePortfolioPerformances } from '@/hooks/usePortfolioRealPerformance';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -34,18 +35,97 @@ export default function DashboardPage() {
     }
   }, [isAuthenticated, isLoading, router]);
 
+  // State for real portfolio performances
+  const [realPerformances, setRealPerformances] = useState<Map<string, { performance: PortfolioPerformance; isRealData: boolean }>>(new Map());
+  const [loadingStats, setLoadingStats] = useState(false);
+
+  // State for top performers with real data
+  const [topPerformersData, setTopPerformersData] = useState<Map<string, { performance: PortfolioPerformance; isRealData: boolean }>>(new Map());
+  const [loadingTopPerformers, setLoadingTopPerformers] = useState(false);
+
+  // Fetch real performance data for all portfolios
+  useEffect(() => {
+    if (portfolios.length === 0) return;
+
+    const fetchPerformances = async () => {
+      setLoadingStats(true);
+      try {
+        const performances = await fetchMultiplePortfolioPerformances(portfolios, '1M');
+        setRealPerformances(performances);
+      } catch (error) {
+        console.error('Failed to fetch portfolio performances:', error);
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+
+    fetchPerformances();
+  }, [portfolios]);
+
+  // Fetch real performance data for top performers (public portfolios)
+  useEffect(() => {
+    const baseEntries = getLeaderboardEntries('all', 5);
+    if (baseEntries.length === 0) return;
+
+    const fetchTopPerformers = async () => {
+      setLoadingTopPerformers(true);
+      try {
+        // Get portfolio IDs from leaderboard entries
+        const { portfolioStorage } = await import('@/lib/storage');
+        const publicPortfolios = portfolioStorage.getPublic();
+        const topPortfolios = publicPortfolios.filter(p =>
+          baseEntries.some(e => e.portfolioId === p.id)
+        );
+
+        if (topPortfolios.length > 0) {
+          const performances = await fetchMultiplePortfolioPerformances(topPortfolios, '1M');
+          setTopPerformersData(performances);
+        }
+      } catch (error) {
+        console.error('Failed to fetch top performers:', error);
+      } finally {
+        setLoadingTopPerformers(false);
+      }
+    };
+
+    fetchTopPerformers();
+  }, []);
+
   const portfolioStats = useMemo(() => {
     if (portfolios.length === 0) return null;
 
-    const performances = portfolios.map((p) => calculatePortfolioPerformance(p));
+    // Use real performances if available, otherwise fall back to mock
+    const performances = portfolios.map((p) => {
+      const realData = realPerformances.get(p.id);
+      return realData?.performance || calculatePortfolioPerformance(p);
+    });
+
     const totalValue = performances.reduce((sum, p) => sum + p.totalValue, 0);
     const totalReturn = performances.reduce((sum, p) => sum + p.totalReturn, 0);
     const avgReturnPercent = performances.reduce((sum, p) => sum + p.totalReturnPercent, 0) / performances.length;
 
-    return { totalValue, totalReturn, avgReturnPercent, count: portfolios.length };
-  }, [portfolios]);
+    return { totalValue, totalReturn, avgReturnPercent, count: portfolios.length, isLoading: loadingStats };
+  }, [portfolios, realPerformances, loadingStats]);
 
-  const topPerformers = useMemo(() => getLeaderboardEntries('month', 5), []);
+  const topPerformers = useMemo(() => {
+    const baseEntries = getLeaderboardEntries('all', 5);
+
+    // Update entries with real performance data
+    return baseEntries.map((entry) => {
+      const realData = topPerformersData.get(entry.portfolioId);
+      if (realData?.isRealData) {
+        return {
+          ...entry,
+          value: realData.performance.totalValue,
+          returnPercent: realData.performance.totalReturnPercent,
+        };
+      }
+      return entry;
+    }).sort((a, b) => b.returnPercent - a.returnPercent).map((entry, index) => ({
+      ...entry,
+      rank: index + 1,
+    }));
+  }, [topPerformersData]);
   const levelInfo = currentUser ? calculateLevel(currentUser.xp) : null;
 
   const handleCreatePortfolio = () => {
@@ -103,9 +183,13 @@ export default function DashboardPage() {
               {portfolioStats ? formatCurrency(portfolioStats.totalValue) : '$0.00'}
             </p>
             {portfolioStats && (
-              <p className={cn('text-sm mt-1', portfolioStats.avgReturnPercent >= 0 ? 'text-emerald-400' : 'text-red-400')}>
-                {formatPercent(portfolioStats.avgReturnPercent)} avg return
-              </p>
+              portfolioStats.isLoading ? (
+                <div className="h-5 w-24 bg-slate-700 animate-pulse rounded mt-1" />
+              ) : (
+                <p className={cn('text-sm mt-1', portfolioStats.avgReturnPercent >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+                  {formatPercent(portfolioStats.avgReturnPercent)} avg return
+                </p>
+              )
             )}
           </div>
 
@@ -232,9 +316,13 @@ export default function DashboardPage() {
                         <p className="text-sm font-medium text-white truncate">@{entry.username}</p>
                         <p className="text-xs text-slate-500 truncate">{entry.portfolioName}</p>
                       </div>
-                      <span className={cn('text-sm font-semibold', entry.returnPercent >= 0 ? 'text-emerald-400' : 'text-red-400')}>
-                        {formatPercent(entry.returnPercent)}
-                      </span>
+                      {loadingTopPerformers ? (
+                        <div className="w-12 h-4 bg-slate-700 animate-pulse rounded" />
+                      ) : (
+                        <span className={cn('text-sm font-semibold', entry.returnPercent >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+                          {formatPercent(entry.returnPercent)}
+                        </span>
+                      )}
                     </div>
                   ))
                 )}

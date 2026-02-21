@@ -217,6 +217,7 @@ export interface LeaderboardEntry {
   value: number;
   returnPercent: number;
   followers: number;
+  createdAt: string;
 }
 
 // Social Types
@@ -300,4 +301,68 @@ export interface RegisterRequest {
 export interface LoginRequest {
   identifier: string; // username or email
   password: string;
+}
+
+// Benchmark Types
+export type BenchmarkSymbol = 'SPY' | 'QQQ' | 'DIA' | 'IWM' | 'VTI';
+
+export interface BenchmarkInfo {
+  symbol: BenchmarkSymbol;
+  name: string;
+  description: string;
+  color: string;
+}
+
+export const BENCHMARKS: BenchmarkInfo[] = [
+  { symbol: 'SPY', name: 'S&P 500', description: 'SPDR S&P 500 ETF - Large-cap US stocks', color: '#ef4444' },
+  { symbol: 'QQQ', name: 'Nasdaq 100', description: 'Invesco QQQ Trust - Tech-heavy index', color: '#f59e0b' },
+  { symbol: 'DIA', name: 'Dow Jones', description: 'SPDR Dow Jones Industrial Average ETF', color: '#3b82f6' },
+  { symbol: 'IWM', name: 'Russell 2000', description: 'iShares Russell 2000 ETF - Small-cap stocks', color: '#8b5cf6' },
+  { symbol: 'VTI', name: 'Total Market', description: 'Vanguard Total Stock Market ETF', color: '#06b6d4' },
+];
+
+export type ComparisonTimeframe = '1W' | '1M' | '3M' | '6M' | '1Y' | 'YTD';
+
+export const COMPARISON_TIMEFRAMES: { value: ComparisonTimeframe; label: string }[] = [
+  { value: '1W', label: '1W' },
+  { value: '1M', label: '1M' },
+  { value: '3M', label: '3M' },
+  { value: '6M', label: '6M' },
+  { value: '1Y', label: '1Y' },
+  { value: 'YTD', label: 'YTD' },
+];
+
+export interface CustomDateRange {
+  startDate: string;
+  endDate: string;
+}
+
+export interface CustomComparisonSymbol {
+  symbol: string;
+  name: string;
+  color: string;
+}
+
+export interface HistoricalDataPoint {
+  timestamp: number;
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  adjClose: number;
+}
+
+export interface BenchmarkPerformance {
+  symbol: BenchmarkSymbol;
+  name: string;
+  color: string;
+  totalReturn: number;
+  totalReturnPercent: number;
+  volatility: number;
+  sharpeRatio: number;
+  maxDrawdown: number;
+  historicalData: HistoricalDataPoint[];
+  normalizedData: { date: string; value: number }[];
 }

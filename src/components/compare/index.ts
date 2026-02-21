@@ -2,3 +2,8 @@ export { PortfolioSelector } from './PortfolioSelector';
 export { MetricComparisonChart } from './MetricComparisonChart';
 export { ComparisonTable } from './ComparisonTable';
 export { ComparisonCard } from './ComparisonCard';
+export { BenchmarkSelector } from './BenchmarkSelector';
+export { TimeframeSelector } from './TimeframeSelector';
+export { PerformanceLineChart } from './PerformanceLineChart';
+export { CustomDateRangeSelector } from './CustomDateRangeSelector';
+export { CustomSymbolSearch } from './CustomSymbolSearch';

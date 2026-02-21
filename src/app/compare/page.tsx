@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useStore } from '@/store/useStore';
 import { portfolioStorage, userStorage } from '@/lib/storage';
@@ -10,17 +10,46 @@ import {
   MetricComparisonChart,
   ComparisonTable,
   ComparisonCard,
+  BenchmarkSelector,
+  TimeframeSelector,
+  PerformanceLineChart,
+  CustomDateRangeSelector,
+  CustomSymbolSearch,
 } from '@/components/compare';
-import { Portfolio, User, PortfolioPerformance } from '@/types';
+import {
+  Portfolio,
+  User,
+  PortfolioPerformance,
+  BenchmarkSymbol,
+  BenchmarkPerformance,
+  ComparisonTimeframe,
+  CustomDateRange,
+  CustomComparisonSymbol,
+} from '@/types';
 import { calculatePortfolioPerformance, formatPercent } from '@/lib/utils';
+import {
+  getMultipleBenchmarkPerformances,
+  getMultipleCustomSymbolPerformances,
+} from '@/lib/benchmarkData';
+import { calculatePortfolioHistoricalData, calculateMetricsFromHistoricalData } from '@/lib/portfolioHistoricalData';
+import { PortfolioHistoricalPoint } from '@/types';
 
 const MAX_PORTFOLIOS = 4;
-const MIN_PORTFOLIOS = 2;
+const MIN_PORTFOLIOS = 1;
 
 export default function ComparePage() {
   const { currentUser, isAuthenticated, loadData, portfolios, publicPortfolios } = useStore();
-  const [selectedIds, setSelectedIds] = useState<string[]>(['', '']);
+  const [selectedIds, setSelectedIds] = useState<string[]>(['']);
   const [users, setUsers] = useState<Map<string, User>>(new Map());
+  const [selectedBenchmarks, setSelectedBenchmarks] = useState<BenchmarkSymbol[]>([]);
+  const [benchmarkPerformances, setBenchmarkPerformances] = useState<BenchmarkPerformance[]>([]);
+  const [timeframe, setTimeframe] = useState<ComparisonTimeframe>('1M');
+  const [loadingBenchmarks, setLoadingBenchmarks] = useState(false);
+  const [customDateRange, setCustomDateRange] = useState<CustomDateRange | null>(null);
+  const [customSymbols, setCustomSymbols] = useState<CustomComparisonSymbol[]>([]);
+  const [customSymbolPerformances, setCustomSymbolPerformances] = useState<BenchmarkPerformance[]>([]);
+  const [portfolioHistoricalData, setPortfolioHistoricalData] = useState<Map<string, PortfolioHistoricalPoint[]>>(new Map());
+  const [loadingPortfolioData, setLoadingPortfolioData] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -42,6 +71,87 @@ export default function ComparePage() {
     setUsers(userMap);
   }, [portfolios, publicPortfolios]);
 
+  // Fetch benchmark data when selected benchmarks, timeframe, or custom date range changes
+  useEffect(() => {
+    const fetchAllBenchmarks = async () => {
+      setLoadingBenchmarks(true);
+      try {
+        // Fetch predefined benchmarks
+        let benchmarkResults: BenchmarkPerformance[] = [];
+        if (selectedBenchmarks.length > 0) {
+          benchmarkResults = await getMultipleBenchmarkPerformances(
+            selectedBenchmarks,
+            timeframe,
+            customDateRange
+          );
+        }
+        setBenchmarkPerformances(benchmarkResults);
+
+        // Fetch custom symbols
+        let customResults: BenchmarkPerformance[] = [];
+        if (customSymbols.length > 0) {
+          customResults = await getMultipleCustomSymbolPerformances(
+            customSymbols,
+            timeframe,
+            customDateRange
+          );
+        }
+        setCustomSymbolPerformances(customResults);
+      } catch (error) {
+        console.error('Failed to fetch benchmark data:', error);
+        setBenchmarkPerformances([]);
+        setCustomSymbolPerformances([]);
+      } finally {
+        setLoadingBenchmarks(false);
+      }
+    };
+
+    if (selectedBenchmarks.length > 0 || customSymbols.length > 0) {
+      fetchAllBenchmarks();
+    } else {
+      setBenchmarkPerformances([]);
+      setCustomSymbolPerformances([]);
+    }
+  }, [selectedBenchmarks, customSymbols, timeframe, customDateRange]);
+
+  // Fetch real historical data for selected portfolios
+  useEffect(() => {
+    const fetchPortfolioHistorical = async () => {
+      const portfolioIds = selectedIds.filter((id) => id !== '');
+      if (portfolioIds.length === 0) {
+        setPortfolioHistoricalData(new Map());
+        return;
+      }
+
+      setLoadingPortfolioData(true);
+      try {
+        const newDataMap = new Map<string, PortfolioHistoricalPoint[]>();
+
+        await Promise.all(
+          portfolioIds.map(async (id) => {
+            const portfolio = portfolioStorage.getById(id);
+            if (portfolio) {
+              const historicalData = await calculatePortfolioHistoricalData(
+                portfolio,
+                timeframe,
+                customDateRange
+              );
+              newDataMap.set(id, historicalData);
+            }
+          })
+        );
+
+        setPortfolioHistoricalData(newDataMap);
+      } catch (error) {
+        console.error('Failed to fetch portfolio historical data:', error);
+      } finally {
+        setLoadingPortfolioData(false);
+      }
+    };
+
+    fetchPortfolioHistorical();
+  }, [selectedIds, timeframe, customDateRange]);
+
   // Get selected portfolios with their performances
   const selectedPortfolios = useMemo(() => {
     return selectedIds
@@ -55,6 +165,28 @@ export default function ComparePage() {
       })
       .filter((item): item is { portfolio: Portfolio; performance: PortfolioPerformance; owner: User | null } => item !== null);
   }, [selectedIds]);
+
+  // Enhance portfolios with real metrics from historical data
+  const selectedPortfoliosWithRealMetrics = useMemo(() => {
+    return selectedPortfolios.map((item) => {
+      const historicalData = portfolioHistoricalData.get(item.portfolio.id);
+      if (historicalData && historicalData.length > 1) {
+        // Calculate real metrics from Yahoo Finance data
+        const realMetrics = calculateMetricsFromHistoricalData(historicalData);
+        return {
+          ...item,
+          performance: {
+            ...item.performance,
+            totalReturnPercent: realMetrics.totalReturnPercent,
+            volatility: realMetrics.volatility,
+            sharpeRatio: realMetrics.sharpeRatio,
+            maxDrawdown: realMetrics.maxDrawdown,
+          },
+        };
+      }
+      return item;
+    });
+  }, [selectedPortfolios, portfolioHistoricalData]);
 
   const handleSelectPortfolio = (index: number, portfolioId: string) => {
     const newIds = [...selectedIds];
@@ -77,6 +209,28 @@ export default function ComparePage() {
       setSelectedIds([...selectedIds, '']);
     }
   };
+
+  const handleToggleBenchmark = useCallback((symbol: BenchmarkSymbol) => {
+    setSelectedBenchmarks((prev) => {
+      if (prev.includes(symbol)) {
+        return prev.filter((s) => s !== symbol);
+      }
+      return [...prev, symbol];
+    });
+  }, []);
+
+  const handleAddCustomSymbol = useCallback((symbol: CustomComparisonSymbol) => {
+    setCustomSymbols((prev) => [...prev, symbol]);
+  }, []);
+
+  const handleRemoveCustomSymbol = useCallback((symbol: string) => {
+    setCustomSymbols((prev) => prev.filter((s) => s.symbol !== symbol));
+  }, []);
+
+  // Combine all benchmark performances for display
+  const allBenchmarkPerformances = useMemo(() => {
+    return [...benchmarkPerformances, ...customSymbolPerformances];
+  }, [benchmarkPerformances, customSymbolPerformances]);
 
   const canCompare = selectedPortfolios.length >= MIN_PORTFOLIOS;
 
@@ -152,7 +306,7 @@ export default function ComparePage() {
             transition={{ delay: 0.2 }}
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
           >
-            {selectedPortfolios.map((item, index) => (
+            {selectedPortfoliosWithRealMetrics.map((item, index) => (
               <ComparisonCard
                 key={item.portfolio.id}
                 portfolio={item.portfolio}
@@ -165,38 +319,117 @@ export default function ComparePage() {
           </motion.div>
         )}
 
+        {/* Benchmark Selection and Timeframe */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+          className="flex flex-col lg:flex-row gap-4 mb-8"
+        >
+          <div className="flex-1">
+            <BenchmarkSelector
+              selectedBenchmarks={selectedBenchmarks}
+              onToggle={handleToggleBenchmark}
+              maxSelections={3}
+            />
+          </div>
+          <div className="flex items-start gap-4">
+            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+              <h3 className="text-sm font-medium text-slate-400 mb-3">Timeframe</h3>
+              <div className="flex items-center gap-3">
+                <TimeframeSelector
+                  selectedTimeframe={timeframe}
+                  onSelect={(tf) => {
+                    setTimeframe(tf);
+                    setCustomDateRange(null); // Clear custom range when preset selected
+                  }}
+                  disabled={loadingBenchmarks || customDateRange !== null}
+                />
+                <CustomDateRangeSelector
+                  dateRange={customDateRange}
+                  onDateRangeChange={setCustomDateRange}
+                  disabled={loadingBenchmarks}
+                />
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Custom Symbol Search */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.28 }}
+          className="mb-8"
+        >
+          <CustomSymbolSearch
+            customSymbols={customSymbols}
+            onAddSymbol={handleAddCustomSymbol}
+            onRemoveSymbol={handleRemoveCustomSymbol}
+            maxSymbols={5}
+          />
+        </motion.div>
+
         {/* Comparison Content */}
         {canCompare ? (
           <>
+            {/* Performance Line Chart */}
+            {(selectedPortfoliosWithRealMetrics.length > 0 || allBenchmarkPerformances.length > 0) && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="mb-8"
+              >
+                <PerformanceLineChart
+                  portfolios={selectedPortfoliosWithRealMetrics.map((p, index) => ({
+                    name: p.portfolio.name,
+                    color: ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b'][index % 4],
+                    performance: p.performance,
+                    createdAt: p.portfolio.createdAt,
+                    realHistoricalData: portfolioHistoricalData.get(p.portfolio.id),
+                  }))}
+                  benchmarks={allBenchmarkPerformances}
+                />
+                {(loadingBenchmarks || loadingPortfolioData) && (
+                  <div className="text-center text-slate-500 text-sm mt-2">
+                    Loading {loadingPortfolioData ? 'portfolio' : 'benchmark'} data...
+                  </div>
+                )}
+              </motion.div>
+            )}
+
             {/* Metric Charts Grid */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
+              transition={{ delay: 0.35 }}
               className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8"
             >
               <MetricComparisonChart
-                performances={selectedPortfolios.map((p) => ({
+                performances={selectedPortfoliosWithRealMetrics.map((p) => ({
                   name: p.portfolio.name.slice(0, 15),
                   performance: p.performance,
                 }))}
+                benchmarks={allBenchmarkPerformances}
                 metricKey="totalReturnPercent"
                 title="Total Return"
                 formatValue={(v) => formatPercent(v, true)}
                 higherIsBetter={true}
               />
               <MetricComparisonChart
-                performances={selectedPortfolios.map((p) => ({
+                performances={selectedPortfoliosWithRealMetrics.map((p) => ({
                   name: p.portfolio.name.slice(0, 15),
                   performance: p.performance,
                 }))}
+                benchmarks={allBenchmarkPerformances}
                 metricKey="sharpeRatio"
                 title="Sharpe Ratio"
                 formatValue={(v) => v.toFixed(2)}
                 higherIsBetter={true}
               />
               <MetricComparisonChart
-                performances={selectedPortfolios.map((p) => ({
+                performances={selectedPortfoliosWithRealMetrics.map((p) => ({
                   name: p.portfolio.name.slice(0, 15),
                   performance: p.performance,
                 }))}
@@ -206,27 +439,29 @@ export default function ComparePage() {
                 higherIsBetter={false}
               />
               <MetricComparisonChart
-                performances={selectedPortfolios.map((p) => ({
+                performances={selectedPortfoliosWithRealMetrics.map((p) => ({
                   name: p.portfolio.name.slice(0, 15),
                   performance: p.performance,
                 }))}
+                benchmarks={allBenchmarkPerformances}
                 metricKey="volatility"
                 title="Volatility"
                 formatValue={(v) => `${v.toFixed(1)}%`}
                 higherIsBetter={false}
               />
               <MetricComparisonChart
-                performances={selectedPortfolios.map((p) => ({
+                performances={selectedPortfoliosWithRealMetrics.map((p) => ({
                   name: p.portfolio.name.slice(0, 15),
                   performance: p.performance,
                 }))}
+                benchmarks={allBenchmarkPerformances}
                 metricKey="maxDrawdown"
                 title="Max Drawdown"
                 formatValue={(v) => `${v.toFixed(1)}%`}
                 higherIsBetter={false}
               />
               <MetricComparisonChart
-                performances={selectedPortfolios.map((p) => ({
+                performances={selectedPortfoliosWithRealMetrics.map((p) => ({
                   name: p.portfolio.name.slice(0, 15),
                   performance: p.performance,
                 }))}
@@ -244,8 +479,9 @@ export default function ComparePage() {
               transition={{ delay: 0.4 }}
             >
               <ComparisonTable
-                portfolioNames={selectedPortfolios.map((p) => p.portfolio.name)}
-                performances={selectedPortfolios.map((p) => p.performance)}
+                portfolioNames={selectedPortfoliosWithRealMetrics.map((p) => p.portfolio.name)}
+                performances={selectedPortfoliosWithRealMetrics.map((p) => p.performance)}
+                benchmarks={allBenchmarkPerformances}
               />
             </motion.div>
           </>
