@@ -86,10 +86,12 @@ export function calculateBenchmarkPerformance(
 
   const firstPrice = historicalData[0].close;
   const lastPrice = historicalData[historicalData.length - 1].close;
+  const initialInvestment = 10000; // Same as portfolio initial investment
 
-  // Calculate total return
-  const totalReturn = lastPrice - firstPrice;
+  // Calculate total return and value
   const totalReturnPercent = ((lastPrice - firstPrice) / firstPrice) * 100;
+  const totalValue = initialInvestment * (lastPrice / firstPrice);
+  const totalReturn = totalValue - initialInvestment;
 
   // Calculate daily returns for volatility
   const dailyReturns: number[] = [];
@@ -127,6 +129,13 @@ export function calculateBenchmarkPerformance(
     }
   }
 
+  // Calculate win rate (positive return days / total days)
+  const winDays = dailyReturns.filter((r) => r > 0).length;
+  const winRate = dailyReturns.length > 0 ? (winDays / dailyReturns.length) * 100 : 0;
+
+  // Beta is 1.0 for market benchmarks (by definition)
+  const beta = 1.0;
+
   // Calculate normalized data (starting from 100)
   const normalizedData = historicalData.map((point) => ({
     date: point.date,
@@ -137,11 +146,14 @@ export function calculateBenchmarkPerformance(
     symbol,
     name: benchmarkInfo.name,
     color: benchmarkInfo.color,
+    totalValue,
     totalReturn,
     totalReturnPercent,
     volatility: annualizedVolatility,
     sharpeRatio: isFinite(sharpeRatio) ? sharpeRatio : 0,
     maxDrawdown,
+    beta,
+    winRate,
     historicalData,
     normalizedData,
   };
@@ -189,10 +201,12 @@ export function calculateCustomSymbolPerformance(
 
   const firstPrice = historicalData[0].close;
   const lastPrice = historicalData[historicalData.length - 1].close;
+  const initialInvestment = 10000; // Same as portfolio initial investment
 
-  // Calculate total return
-  const totalReturn = lastPrice - firstPrice;
+  // Calculate total return and value
   const totalReturnPercent = ((lastPrice - firstPrice) / firstPrice) * 100;
+  const totalValue = initialInvestment * (lastPrice / firstPrice);
+  const totalReturn = totalValue - initialInvestment;
 
   // Calculate daily returns for volatility
   const dailyReturns: number[] = [];
@@ -230,6 +244,13 @@ export function calculateCustomSymbolPerformance(
     }
   }
 
+  // Calculate win rate (positive return days / total days)
+  const winDays = dailyReturns.filter((r) => r > 0).length;
+  const winRate = dailyReturns.length > 0 ? (winDays / dailyReturns.length) * 100 : 0;
+
+  // Beta for custom symbols defaults to 1.0 (would need correlation calculation for accurate beta)
+  const beta = 1.0;
+
   // Calculate normalized data
   const normalizedData = historicalData.map((point) => ({
     date: point.date,
@@ -240,11 +261,14 @@ export function calculateCustomSymbolPerformance(
     symbol: symbol.symbol as BenchmarkSymbol,
     name: symbol.name,
     color: symbol.color,
+    totalValue,
     totalReturn,
     totalReturnPercent,
     volatility: annualizedVolatility,
     sharpeRatio: isFinite(sharpeRatio) ? sharpeRatio : 0,
     maxDrawdown,
+    beta,
+    winRate,
     historicalData,
     normalizedData,
   };

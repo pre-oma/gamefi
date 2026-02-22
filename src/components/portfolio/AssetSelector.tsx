@@ -295,13 +295,19 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({
                   {/* Stats */}
                   <div className="hidden sm:flex flex-col gap-1 text-right min-w-[100px]">
                     <div className="flex justify-between text-xs">
-                      <span className="text-slate-500">MCap:</span>
-                      <span className="text-slate-300">{formatNumber(asset.marketCap)}</span>
+                      <span className="text-slate-500">P/E:</span>
+                      <span className="text-slate-300">{asset.peRatio !== null ? asset.peRatio.toFixed(1) : 'N/A'}</span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-slate-500">Beta:</span>
                       <span className={riskColors.text}>{asset.beta.toFixed(2)}</span>
                     </div>
+                    {asset.eps !== undefined && asset.eps !== null && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-500">EPS:</span>
+                        <span className="text-slate-300">${asset.eps.toFixed(2)}</span>
+                      </div>
+                    )}
                     {asset.dividendYield > 0 && (
                       <div className="flex justify-between text-xs">
                         <span className="text-slate-500">Div:</span>

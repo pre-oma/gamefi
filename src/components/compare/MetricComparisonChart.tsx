@@ -30,6 +30,10 @@ const getBenchmarkValue = (
       return benchmark.sharpeRatio;
     case 'maxDrawdown':
       return benchmark.maxDrawdown;
+    case 'beta':
+      return benchmark.beta;
+    case 'winRate':
+      return benchmark.winRate;
     default:
       return null;
   }

@@ -1,4 +1,4 @@
-import { Portfolio, PortfolioPerformance, Asset, LeaderboardEntry, User } from '@/types';
+import { Portfolio, PortfolioPerformance, Asset, LeaderboardEntry, User, PortfolioPlayer } from '@/types';
 import { format, subDays, subMonths, subYears } from 'date-fns';
 import { portfolioStorage, userStorage } from './storage';
 
@@ -451,4 +451,100 @@ export const calculateLevel = (xp: number): { level: number; currentXp: number; 
     currentXp: xp - previousTotal,
     nextLevelXp: totalXpRequired - previousTotal,
   };
+};
+
+// ========== Fundamental Metrics Calculations ==========
+
+/**
+ * Calculate Alpha for a portfolio
+ * Alpha = Portfolio Return - (Beta * Benchmark Return)
+ */
+export function calculateAlpha(
+  portfolioReturn: number,
+  portfolioBeta: number,
+  benchmarkReturn: number
+): number {
+  return portfolioReturn - (portfolioBeta * benchmarkReturn);
+}
+
+/**
+ * Calculate weighted average of a metric across portfolio holdings
+ */
+export function calculateWeightedMetric(
+  players: PortfolioPlayer[],
+  metricKey: keyof Asset
+): number | null {
+  const validPlayers = players.filter((p) => {
+    if (!p.asset) return false;
+    const value = p.asset[metricKey];
+    return value !== null && value !== undefined && typeof value === 'number' && !isNaN(value);
+  });
+
+  if (validPlayers.length === 0) return null;
+
+  const totalAllocation = validPlayers.reduce((sum, p) => sum + p.allocation, 0);
+  if (totalAllocation === 0) return null;
+
+  const weightedSum = validPlayers.reduce((sum, p) => {
+    const value = p.asset![metricKey] as number;
+    return sum + value * (p.allocation / totalAllocation);
+  }, 0);
+
+  return weightedSum;
+}
+
+/**
+ * Portfolio aggregate metrics from fundamental data
+ */
+export interface PortfolioAggregateMetrics {
+  weightedPE: number | null;
+  weightedEPS: number | null;
+  weightedPEG: number | null;
+  weightedPriceToBook: number | null;
+  weightedROE: number | null;
+  weightedProfitMargin: number | null;
+  weightedDebtToEquity: number | null;
+}
+
+/**
+ * Calculate all portfolio-level aggregate metrics
+ */
+export function calculatePortfolioAggregateMetrics(
+  players: PortfolioPlayer[]
+): PortfolioAggregateMetrics {
+  return {
+    weightedPE: calculateWeightedMetric(players, 'peRatio'),
+    weightedEPS: calculateWeightedMetric(players, 'eps'),
+    weightedPEG: calculateWeightedMetric(players, 'pegRatio'),
+    weightedPriceToBook: calculateWeightedMetric(players, 'priceToBook'),
+    weightedROE: calculateWeightedMetric(players, 'returnOnEquity'),
+    weightedProfitMargin: calculateWeightedMetric(players, 'profitMargin'),
+    weightedDebtToEquity: calculateWeightedMetric(players, 'debtToEquity'),
+  };
+}
+
+// ========== Formatting utilities for fundamental metrics ==========
+
+export const formatPE = (value: number | null | undefined): string =>
+  value === null || value === undefined ? 'N/A' : value.toFixed(2);
+
+export const formatEPS = (value: number | null | undefined): string =>
+  value === null || value === undefined ? 'N/A' : `$${value.toFixed(2)}`;
+
+export const formatRatio = (value: number | null | undefined): string =>
+  value === null || value === undefined ? 'N/A' : value.toFixed(2);
+
+export const formatPercentMetric = (value: number | null | undefined): string => {
+  if (value === null || value === undefined) return 'N/A';
+  // If value is already a decimal (e.g., 0.15 for 15%), multiply by 100
+  const displayValue = Math.abs(value) < 1 ? value * 100 : value;
+  return `${displayValue.toFixed(2)}%`;
+};
+
+export const formatMarketCap = (value: number | null | undefined): string => {
+  if (value === null || value === undefined) return 'N/A';
+  if (value >= 1e12) return `$${(value / 1e12).toFixed(2)}T`;
+  if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
+  if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
+  return `$${value.toFixed(0)}`;
 };

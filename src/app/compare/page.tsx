@@ -33,6 +33,7 @@ import {
 } from '@/lib/benchmarkData';
 import { calculatePortfolioHistoricalData, calculateMetricsFromHistoricalData } from '@/lib/portfolioHistoricalData';
 import { PortfolioHistoricalPoint } from '@/types';
+import { fetchMultipleFundamentals, AssetFundamentals } from '@/lib/yahooFundamentals';
 
 const MAX_PORTFOLIOS = 4;
 const MIN_PORTFOLIOS = 1;
@@ -50,10 +51,34 @@ export default function ComparePage() {
   const [customSymbolPerformances, setCustomSymbolPerformances] = useState<BenchmarkPerformance[]>([]);
   const [portfolioHistoricalData, setPortfolioHistoricalData] = useState<Map<string, PortfolioHistoricalPoint[]>>(new Map());
   const [loadingPortfolioData, setLoadingPortfolioData] = useState(false);
+  const [fundamentalsMap, setFundamentalsMap] = useState<Map<string, AssetFundamentals>>(new Map());
+  const [loadingFundamentals, setLoadingFundamentals] = useState(false);
+  const [spyBenchmarkReturn, setSpyBenchmarkReturn] = useState<number | null>(null);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Fetch SPY benchmark data for alpha calculation (always fetch regardless of user selection)
+  useEffect(() => {
+    const fetchSpyForAlpha = async () => {
+      try {
+        const { fetchBenchmarkHistoricalData } = await import('@/lib/benchmarkData');
+        const spyData = await fetchBenchmarkHistoricalData('SPY', timeframe, customDateRange);
+        if (spyData.length > 1) {
+          const firstValue = spyData[0].close;
+          const lastValue = spyData[spyData.length - 1].close;
+          const spyReturn = ((lastValue - firstValue) / firstValue) * 100;
+          setSpyBenchmarkReturn(spyReturn);
+        }
+      } catch (error) {
+        console.error('Failed to fetch SPY for alpha calculation:', error);
+        setSpyBenchmarkReturn(null);
+      }
+    };
+
+    fetchSpyForAlpha();
+  }, [timeframe, customDateRange]);
 
   // Load all users for displaying portfolio owners
   useEffect(() => {
@@ -152,6 +177,47 @@ export default function ComparePage() {
     fetchPortfolioHistorical();
   }, [selectedIds, timeframe, customDateRange]);
 
+  // Fetch fundamentals for all assets in selected portfolios
+  useEffect(() => {
+    const fetchFundamentals = async () => {
+      const portfolioIds = selectedIds.filter((id) => id !== '');
+      if (portfolioIds.length === 0) {
+        setFundamentalsMap(new Map());
+        return;
+      }
+
+      // Collect all unique symbols from selected portfolios
+      const allSymbols = new Set<string>();
+      portfolioIds.forEach((id) => {
+        const portfolio = portfolioStorage.getById(id);
+        if (portfolio) {
+          portfolio.players.forEach((player) => {
+            if (player.asset?.symbol) {
+              allSymbols.add(player.asset.symbol.toUpperCase());
+            }
+          });
+        }
+      });
+
+      if (allSymbols.size === 0) {
+        setFundamentalsMap(new Map());
+        return;
+      }
+
+      setLoadingFundamentals(true);
+      try {
+        const fundamentals = await fetchMultipleFundamentals(Array.from(allSymbols));
+        setFundamentalsMap(fundamentals);
+      } catch (error) {
+        console.error('Failed to fetch fundamentals:', error);
+      } finally {
+        setLoadingFundamentals(false);
+      }
+    };
+
+    fetchFundamentals();
+  }, [selectedIds]);
+
   // Get selected portfolios with their performances
   const selectedPortfolios = useMemo(() => {
     return selectedIds
@@ -166,27 +232,146 @@ export default function ComparePage() {
       .filter((item): item is { portfolio: Portfolio; performance: PortfolioPerformance; owner: User | null } => item !== null);
   }, [selectedIds]);
 
+  // Combine all benchmark performances for display (moved here for dependency ordering)
+  const allBenchmarkPerformances = useMemo(() => {
+    return [...benchmarkPerformances, ...customSymbolPerformances];
+  }, [benchmarkPerformances, customSymbolPerformances]);
+
+  // Calculate weighted fundamental metrics from portfolio assets using fetched fundamentals
+  const calculateWeightedFundamentals = useCallback((portfolio: Portfolio) => {
+    const playersWithAssets = portfolio.players.filter((p) => p.asset);
+    const totalAllocation = playersWithAssets.reduce((sum, p) => sum + p.allocation, 0);
+
+    if (totalAllocation === 0) {
+      return {
+        weightedPE: null,
+        weightedEPS: null,
+        weightedROE: null,
+        weightedProfitMargin: null,
+        weightedDebtToEquity: null,
+      };
+    }
+
+    let weightedPE = 0;
+    let weightedEPS = 0;
+    let weightedROE = 0;
+    let weightedProfitMargin = 0;
+    let weightedDebtToEquity = 0;
+    let peCount = 0;
+    let epsCount = 0;
+    let roeCount = 0;
+    let marginCount = 0;
+    let debtCount = 0;
+
+    playersWithAssets.forEach((player) => {
+      const asset = player.asset!;
+      const symbol = asset.symbol.toUpperCase();
+      const fundamentals = fundamentalsMap.get(symbol);
+      const weight = player.allocation / totalAllocation;
+
+      // Use fundamentals from API if available, otherwise fall back to asset data
+      const peRatio = fundamentals?.peRatio ?? asset.peRatio;
+      const eps = fundamentals?.eps ?? asset.eps;
+      const returnOnEquity = fundamentals?.returnOnEquity ?? asset.returnOnEquity;
+      const profitMargin = fundamentals?.profitMargin ?? asset.profitMargin;
+      const debtToEquity = fundamentals?.debtToEquity ?? asset.debtToEquity;
+
+      if (peRatio !== null && peRatio !== undefined) {
+        weightedPE += peRatio * weight;
+        peCount++;
+      }
+      if (eps !== null && eps !== undefined) {
+        weightedEPS += eps * weight;
+        epsCount++;
+      }
+      if (returnOnEquity !== null && returnOnEquity !== undefined) {
+        weightedROE += returnOnEquity * weight;
+        roeCount++;
+      }
+      if (profitMargin !== null && profitMargin !== undefined) {
+        weightedProfitMargin += profitMargin * weight;
+        marginCount++;
+      }
+      if (debtToEquity !== null && debtToEquity !== undefined) {
+        weightedDebtToEquity += debtToEquity * weight;
+        debtCount++;
+      }
+    });
+
+    return {
+      weightedPE: peCount > 0 ? weightedPE : null,
+      weightedEPS: epsCount > 0 ? weightedEPS : null,
+      weightedROE: roeCount > 0 ? weightedROE : null,
+      weightedProfitMargin: marginCount > 0 ? weightedProfitMargin : null,
+      weightedDebtToEquity: debtCount > 0 ? weightedDebtToEquity : null,
+    };
+  }, [fundamentalsMap]);
+
   // Enhance portfolios with real metrics from historical data
   const selectedPortfoliosWithRealMetrics = useMemo(() => {
+    const initialInvestment = 10000;
+
+    // Use the dedicated SPY benchmark return for alpha calculation
+    const benchmarkReturn = spyBenchmarkReturn;
+
     return selectedPortfolios.map((item) => {
       const historicalData = portfolioHistoricalData.get(item.portfolio.id);
+
+      // Calculate weighted fundamental metrics
+      const fundamentals = calculateWeightedFundamentals(item.portfolio);
+
       if (historicalData && historicalData.length > 1) {
         // Calculate real metrics from Yahoo Finance data
         const realMetrics = calculateMetricsFromHistoricalData(historicalData);
+
+        // Calculate real value from historical data (normalized to 100)
+        const lastNormalizedValue = historicalData[historicalData.length - 1].value;
+        const realValue = initialInvestment * (lastNormalizedValue / 100);
+        const realTotalReturn = realValue - initialInvestment;
+
+        // Calculate win rate from daily returns
+        let winDays = 0;
+        for (let i = 1; i < historicalData.length; i++) {
+          if (historicalData[i].value > historicalData[i - 1].value) {
+            winDays++;
+          }
+        }
+        const winRate = historicalData.length > 1
+          ? (winDays / (historicalData.length - 1)) * 100
+          : item.performance.winRate;
+
+        // Calculate alpha: Portfolio Return - (Beta * Benchmark Return)
+        const alpha = benchmarkReturn !== null
+          ? realMetrics.totalReturnPercent - (item.performance.beta * benchmarkReturn)
+          : null;
+
         return {
           ...item,
           performance: {
             ...item.performance,
+            totalValue: realValue,
+            totalReturn: realTotalReturn,
             totalReturnPercent: realMetrics.totalReturnPercent,
             volatility: realMetrics.volatility,
             sharpeRatio: realMetrics.sharpeRatio,
             maxDrawdown: realMetrics.maxDrawdown,
+            winRate,
+            alpha,
+            ...fundamentals,
           },
         };
       }
-      return item;
+
+      // Even without historical data, still add fundamentals
+      return {
+        ...item,
+        performance: {
+          ...item.performance,
+          ...fundamentals,
+        },
+      };
     });
-  }, [selectedPortfolios, portfolioHistoricalData]);
+  }, [selectedPortfolios, portfolioHistoricalData, spyBenchmarkReturn, calculateWeightedFundamentals]);
 
   const handleSelectPortfolio = (index: number, portfolioId: string) => {
     const newIds = [...selectedIds];
@@ -226,11 +411,6 @@ export default function ComparePage() {
   const handleRemoveCustomSymbol = useCallback((symbol: string) => {
     setCustomSymbols((prev) => prev.filter((s) => s.symbol !== symbol));
   }, []);
-
-  // Combine all benchmark performances for display
-  const allBenchmarkPerformances = useMemo(() => {
-    return [...benchmarkPerformances, ...customSymbolPerformances];
-  }, [benchmarkPerformances, customSymbolPerformances]);
 
   const canCompare = selectedPortfolios.length >= MIN_PORTFOLIOS;
 
@@ -433,6 +613,7 @@ export default function ComparePage() {
                   name: p.portfolio.name.slice(0, 15),
                   performance: p.performance,
                 }))}
+                benchmarks={allBenchmarkPerformances}
                 metricKey="beta"
                 title="Beta"
                 formatValue={(v) => v.toFixed(2)}
@@ -465,6 +646,7 @@ export default function ComparePage() {
                   name: p.portfolio.name.slice(0, 15),
                   performance: p.performance,
                 }))}
+                benchmarks={allBenchmarkPerformances}
                 metricKey="winRate"
                 title="Win Rate"
                 formatValue={(v) => `${v.toFixed(1)}%`}

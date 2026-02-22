@@ -44,6 +44,22 @@ export interface Asset {
   weekHigh52: number;
   weekLow52: number;
   logoUrl?: string;
+  // Extended fundamental metrics
+  eps?: number | null;
+  forwardEps?: number | null;
+  forwardPE?: number | null;
+  pegRatio?: number | null;
+  priceToBook?: number | null;
+  returnOnEquity?: number | null;
+  returnOnAssets?: number | null;
+  profitMargin?: number | null;
+  operatingMargin?: number | null;
+  grossMargin?: number | null;
+  debtToEquity?: number | null;
+  currentRatio?: number | null;
+  revenueGrowth?: number | null;
+  earningsGrowth?: number | null;
+  industry?: string | null;
 }
 
 export interface AssetHistoricalData {
@@ -194,6 +210,17 @@ export interface PortfolioPerformance {
   dayVsPreviousDay: number;        // Today's change vs yesterday's change
   weekVsPreviousWeek: number;      // This week vs last week
   isImproving: boolean;            // Trend indicator
+  // Portfolio-level calculated fundamental metrics
+  alpha?: number | null;           // Portfolio Return - (Beta * Benchmark Return)
+  weightedPE?: number | null;      // Weighted average P/E
+  weightedEPS?: number | null;     // Weighted average EPS
+  weightedPEG?: number | null;     // Weighted average PEG
+  weightedPriceToBook?: number | null;
+  weightedROE?: number | null;     // Weighted average ROE
+  weightedProfitMargin?: number | null;
+  weightedDebtToEquity?: number | null;
+  benchmarkReturn?: number | null; // For Alpha calculation
+  benchmarkSymbol?: string;        // e.g., 'SPY'
 }
 
 export interface PortfolioHistoricalPoint {
@@ -358,11 +385,14 @@ export interface BenchmarkPerformance {
   symbol: BenchmarkSymbol;
   name: string;
   color: string;
+  totalValue: number;
   totalReturn: number;
   totalReturnPercent: number;
   volatility: number;
   sharpeRatio: number;
   maxDrawdown: number;
+  beta: number;
+  winRate: number;
   historicalData: HistoricalDataPoint[];
   normalizedData: { date: string; value: number }[];
 }

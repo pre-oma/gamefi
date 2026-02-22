@@ -29,9 +29,21 @@ import {
   exportPortfolioToCSV,
   getShareUrl,
   copyToClipboard,
+  formatPE,
+  formatEPS,
+  formatPercentMetric,
+  formatRatio,
 } from '@/lib/utils';
+import { usePortfolioFundamentals } from '@/hooks/usePortfolioFundamentals';
 
 const CHART_COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#6b7280'];
+
+// Stable empty portfolio reference for when portfolio is null
+const EMPTY_PORTFOLIO: Portfolio = {
+  id: '', userId: '', name: '', description: '', formation: '4-3-3',
+  players: [], createdAt: '', updatedAt: '', isPublic: false,
+  likes: [], cloneCount: 0, clonedFrom: null, tags: []
+};
 
 export default function PortfolioDetailPage() {
   const router = useRouter();
@@ -68,6 +80,14 @@ export default function PortfolioDetailPage() {
     }
     return calculatePortfolioPerformance(portfolio);
   }, [portfolio, dateRangeStart, dateRangeEnd]);
+
+  // Fetch fundamental metrics for portfolio
+  const { aggregateMetrics, alpha, benchmarkReturn, isLoading: fundamentalsLoading } = usePortfolioFundamentals(
+    portfolio || EMPTY_PORTFOLIO,
+    performance?.totalReturnPercent || 0,
+    performance?.beta || 1,
+    { enabled: !!portfolio && portfolio.players.some(p => p.asset) }
+  );
 
   const portfolioMinDate = useMemo(() => {
     if (!portfolio) return new Date();
@@ -329,6 +349,120 @@ export default function PortfolioDetailPage() {
               </div>
               <p className="text-lg font-bold text-white">{filledPositions}/11</p>
               <p className="text-xs text-slate-500 mt-1">players filled</p>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Fundamental Metrics Section */}
+        {performance && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="mb-8"
+          >
+            <h3 className="text-sm font-medium text-slate-400 mb-3">Fundamental Metrics</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+              {/* Alpha */}
+              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
+                <p className="text-xs text-slate-500 mb-1">Alpha</p>
+                {fundamentalsLoading ? (
+                  <div className="w-12 h-5 bg-slate-700 animate-pulse rounded" />
+                ) : (
+                  <p className={cn(
+                    'text-sm font-bold',
+                    alpha !== null && alpha >= 0 ? 'text-emerald-400' : 'text-red-400'
+                  )}>
+                    {alpha !== null ? `${alpha >= 0 ? '+' : ''}${alpha.toFixed(2)}%` : 'N/A'}
+                  </p>
+                )}
+                <p className="text-xs text-slate-600 mt-0.5">vs SPY</p>
+              </div>
+
+              {/* Weighted P/E */}
+              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
+                <p className="text-xs text-slate-500 mb-1">Avg P/E</p>
+                {fundamentalsLoading ? (
+                  <div className="w-12 h-5 bg-slate-700 animate-pulse rounded" />
+                ) : (
+                  <p className="text-sm font-bold text-white">{formatPE(aggregateMetrics.weightedPE)}</p>
+                )}
+              </div>
+
+              {/* Weighted EPS */}
+              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
+                <p className="text-xs text-slate-500 mb-1">Avg EPS</p>
+                {fundamentalsLoading ? (
+                  <div className="w-12 h-5 bg-slate-700 animate-pulse rounded" />
+                ) : (
+                  <p className="text-sm font-bold text-white">{formatEPS(aggregateMetrics.weightedEPS)}</p>
+                )}
+              </div>
+
+              {/* Weighted PEG */}
+              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
+                <p className="text-xs text-slate-500 mb-1">Avg PEG</p>
+                {fundamentalsLoading ? (
+                  <div className="w-12 h-5 bg-slate-700 animate-pulse rounded" />
+                ) : (
+                  <p className="text-sm font-bold text-white">{formatRatio(aggregateMetrics.weightedPEG)}</p>
+                )}
+              </div>
+
+              {/* Weighted ROE */}
+              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
+                <p className="text-xs text-slate-500 mb-1">Avg ROE</p>
+                {fundamentalsLoading ? (
+                  <div className="w-12 h-5 bg-slate-700 animate-pulse rounded" />
+                ) : (
+                  <p className={cn(
+                    'text-sm font-bold',
+                    aggregateMetrics.weightedROE !== null && aggregateMetrics.weightedROE > 0 ? 'text-emerald-400' : 'text-white'
+                  )}>
+                    {formatPercentMetric(aggregateMetrics.weightedROE)}
+                  </p>
+                )}
+              </div>
+
+              {/* Weighted Profit Margin */}
+              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
+                <p className="text-xs text-slate-500 mb-1">Avg Margin</p>
+                {fundamentalsLoading ? (
+                  <div className="w-12 h-5 bg-slate-700 animate-pulse rounded" />
+                ) : (
+                  <p className={cn(
+                    'text-sm font-bold',
+                    aggregateMetrics.weightedProfitMargin !== null && aggregateMetrics.weightedProfitMargin > 0 ? 'text-emerald-400' : 'text-white'
+                  )}>
+                    {formatPercentMetric(aggregateMetrics.weightedProfitMargin)}
+                  </p>
+                )}
+              </div>
+
+              {/* Weighted P/B */}
+              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
+                <p className="text-xs text-slate-500 mb-1">Avg P/B</p>
+                {fundamentalsLoading ? (
+                  <div className="w-12 h-5 bg-slate-700 animate-pulse rounded" />
+                ) : (
+                  <p className="text-sm font-bold text-white">{formatRatio(aggregateMetrics.weightedPriceToBook)}</p>
+                )}
+              </div>
+
+              {/* Weighted D/E */}
+              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
+                <p className="text-xs text-slate-500 mb-1">Avg D/E</p>
+                {fundamentalsLoading ? (
+                  <div className="w-12 h-5 bg-slate-700 animate-pulse rounded" />
+                ) : (
+                  <p className={cn(
+                    'text-sm font-bold',
+                    aggregateMetrics.weightedDebtToEquity !== null && aggregateMetrics.weightedDebtToEquity > 1.5 ? 'text-amber-400' : 'text-white'
+                  )}>
+                    {formatRatio(aggregateMetrics.weightedDebtToEquity)}
+                  </p>
+                )}
+              </div>
             </div>
           </motion.div>
         )}

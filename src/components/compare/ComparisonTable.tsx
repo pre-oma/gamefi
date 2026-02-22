@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { PortfolioPerformance, BenchmarkPerformance } from '@/types';
-import { cn, formatCurrency, formatPercent } from '@/lib/utils';
+import { cn, formatCurrency, formatPercent, formatPE, formatEPS, formatPercentMetric, formatRatio } from '@/lib/utils';
 
 interface MetricConfig {
   key: keyof PortfolioPerformance;
@@ -13,16 +13,22 @@ interface MetricConfig {
 }
 
 const METRICS: MetricConfig[] = [
-  { key: 'totalValue', label: 'Total Value', format: formatCurrency, higherIsBetter: true },
+  { key: 'totalValue', label: 'Total Value', format: formatCurrency, higherIsBetter: true, benchmarkKey: 'totalValue' },
   { key: 'totalReturnPercent', label: 'Total Return', format: (v) => formatPercent(v), higherIsBetter: true, benchmarkKey: 'totalReturnPercent' },
+  { key: 'alpha', label: 'Alpha', format: (v) => v !== null ? `${v >= 0 ? '+' : ''}${v.toFixed(2)}%` : 'N/A', higherIsBetter: true },
   { key: 'dayReturnPercent', label: 'Day Return', format: (v) => formatPercent(v), higherIsBetter: true },
   { key: 'weekReturnPercent', label: 'Week Return', format: (v) => formatPercent(v), higherIsBetter: true },
   { key: 'monthReturnPercent', label: 'Month Return', format: (v) => formatPercent(v), higherIsBetter: true },
   { key: 'sharpeRatio', label: 'Sharpe Ratio', format: (v) => v.toFixed(2), higherIsBetter: true, benchmarkKey: 'sharpeRatio' },
-  { key: 'beta', label: 'Beta', format: (v) => v.toFixed(2), higherIsBetter: false },
+  { key: 'beta', label: 'Beta', format: (v) => v.toFixed(2), higherIsBetter: false, benchmarkKey: 'beta' },
   { key: 'volatility', label: 'Volatility', format: (v) => `${v.toFixed(2)}%`, higherIsBetter: false, benchmarkKey: 'volatility' },
   { key: 'maxDrawdown', label: 'Max Drawdown', format: (v) => `${v.toFixed(2)}%`, higherIsBetter: false, benchmarkKey: 'maxDrawdown' },
-  { key: 'winRate', label: 'Win Rate', format: (v) => `${v.toFixed(1)}%`, higherIsBetter: true },
+  { key: 'winRate', label: 'Win Rate', format: (v) => `${v.toFixed(1)}%`, higherIsBetter: true, benchmarkKey: 'winRate' },
+  { key: 'weightedPE', label: 'Avg P/E', format: (v) => v !== null ? formatPE(v) : 'N/A', higherIsBetter: false },
+  { key: 'weightedEPS', label: 'Avg EPS', format: (v) => v !== null ? formatEPS(v) : 'N/A', higherIsBetter: true },
+  { key: 'weightedROE', label: 'Avg ROE', format: (v) => v !== null ? formatPercentMetric(v) : 'N/A', higherIsBetter: true },
+  { key: 'weightedProfitMargin', label: 'Avg Margin', format: (v) => v !== null ? formatPercentMetric(v) : 'N/A', higherIsBetter: true },
+  { key: 'weightedDebtToEquity', label: 'Avg D/E', format: (v) => v !== null ? formatRatio(v) : 'N/A', higherIsBetter: false },
 ];
 
 interface ComparisonTableProps {
@@ -39,10 +45,19 @@ export const ComparisonTable: React.FC<ComparisonTableProps> = ({
   const findBestIndex = (metric: MetricConfig): number => {
     if (performances.length === 0) return -1;
 
-    const values = performances.map((p) => Number(p[metric.key]) || 0);
+    // Get values, filtering out null/undefined for comparison
+    const values = performances.map((p) => {
+      const v = p[metric.key];
+      return v === null || v === undefined ? null : (typeof v === 'number' ? v : Number(v));
+    });
+
+    // Filter to only valid numbers for finding best
+    const validValues = values.filter((v): v is number => v !== null && !isNaN(v));
+    if (validValues.length === 0) return -1;
+
     const bestValue = metric.higherIsBetter
-      ? Math.max(...values)
-      : Math.min(...values);
+      ? Math.max(...validValues)
+      : Math.min(...validValues);
 
     return values.indexOf(bestValue);
   };
@@ -99,8 +114,12 @@ export const ComparisonTable: React.FC<ComparisonTableProps> = ({
                 <tr key={metric.key} className="hover:bg-slate-800/30 transition-colors">
                   <td className="px-6 py-4 text-sm text-slate-400">{metric.label}</td>
                   {performances.map((perf, index) => {
-                    const value = Number(perf[metric.key]) || 0;
-                    const isBest = index === bestIndex && performances.length > 1;
+                    const rawValue = perf[metric.key];
+                    // Preserve null/undefined for metrics that use N/A formatting
+                    const value = rawValue === null || rawValue === undefined
+                      ? null
+                      : (typeof rawValue === 'number' ? rawValue : Number(rawValue) || 0);
+                    const isBest = index === bestIndex && performances.length > 1 && value !== null;
 
                     return (
                       <td
@@ -111,7 +130,7 @@ export const ComparisonTable: React.FC<ComparisonTableProps> = ({
                         )}
                       >
                         <div className="flex items-center gap-2">
-                          {metric.format(value)}
+                          {metric.format(value as number)}
                           {isBest && (
                             <svg className="w-4 h-4 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
