@@ -1,0 +1,386 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase';
+import { CHALLENGE_XP, Portfolio, PortfolioPlayer } from '@/types';
+import {
+  fetchSP500ReturnForPeriod,
+  calculatePortfolioReturnForPeriod,
+  formatDateString,
+} from '@/lib/challengePerformance';
+
+// Get base URL for internal API calls
+function getBaseUrl(request: NextRequest): string {
+  const host = request.headers.get('host') || 'localhost:3000';
+  const protocol = host.includes('localhost') ? 'http' : 'https';
+  return `${protocol}://${host}`;
+}
+
+// POST - Settle completed challenges
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { challengeId } = body as { challengeId?: string };
+    const baseUrl = getBaseUrl(request);
+
+    // Build query for challenges that need settling
+    let query = supabase
+      .from('challenges')
+      .select('*')
+      .eq('status', 'active')
+      .lte('end_date', new Date().toISOString());
+
+    // If specific challenge ID provided, only settle that one
+    if (challengeId) {
+      query = query.eq('id', challengeId);
+    }
+
+    const { data: challenges, error: fetchError } = await query;
+
+    if (fetchError) {
+      return NextResponse.json(
+        { success: false, error: fetchError.message },
+        { status: 500 }
+      );
+    }
+
+    if (!challenges || challenges.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: 'No challenges to settle',
+        settledCount: 0,
+      });
+    }
+
+    const settledChallenges = [];
+    const errors: string[] = [];
+
+    for (const challenge of challenges) {
+      try {
+        const startDate = challenge.start_date?.split('T')[0] || formatDateString(new Date());
+        const endDate = challenge.end_date?.split('T')[0] || formatDateString(new Date());
+
+        // Fetch challenger portfolio
+        const { data: challengerPortfolioData } = await supabase
+          .from('portfolios')
+          .select('*')
+          .eq('id', challenge.challenger_portfolio_id)
+          .single();
+
+        let challengerReturnPercent = 0;
+
+        if (challengerPortfolioData) {
+          const challengerPortfolio: Portfolio = {
+            id: challengerPortfolioData.id,
+            userId: challengerPortfolioData.user_id,
+            name: challengerPortfolioData.name,
+            description: challengerPortfolioData.description,
+            formation: challengerPortfolioData.formation,
+            players: typeof challengerPortfolioData.players === 'string'
+              ? JSON.parse(challengerPortfolioData.players)
+              : challengerPortfolioData.players,
+            createdAt: challengerPortfolioData.created_at,
+            updatedAt: challengerPortfolioData.updated_at,
+            isPublic: challengerPortfolioData.is_public,
+            likes: [],
+            clonedFrom: challengerPortfolioData.cloned_from,
+            cloneCount: challengerPortfolioData.clone_count,
+            tags: challengerPortfolioData.tags || [],
+          };
+
+          // Calculate real portfolio return
+          challengerReturnPercent = await calculatePortfolioReturnForPeriod(
+            challengerPortfolio,
+            startDate,
+            endDate,
+            baseUrl
+          );
+        }
+
+        // Calculate opponent return
+        let opponentReturnPercent = 0;
+
+        if (challenge.type === 'sp500') {
+          // Fetch real S&P 500 return
+          opponentReturnPercent = await fetchSP500ReturnForPeriod(startDate, endDate, baseUrl);
+        } else if (challenge.opponent_portfolio_id) {
+          // Fetch opponent portfolio and calculate return
+          const { data: opponentPortfolioData } = await supabase
+            .from('portfolios')
+            .select('*')
+            .eq('id', challenge.opponent_portfolio_id)
+            .single();
+
+          if (opponentPortfolioData) {
+            const opponentPortfolio: Portfolio = {
+              id: opponentPortfolioData.id,
+              userId: opponentPortfolioData.user_id,
+              name: opponentPortfolioData.name,
+              description: opponentPortfolioData.description,
+              formation: opponentPortfolioData.formation,
+              players: typeof opponentPortfolioData.players === 'string'
+                ? JSON.parse(opponentPortfolioData.players)
+                : opponentPortfolioData.players,
+              createdAt: opponentPortfolioData.created_at,
+              updatedAt: opponentPortfolioData.updated_at,
+              isPublic: opponentPortfolioData.is_public,
+              likes: [],
+              clonedFrom: opponentPortfolioData.cloned_from,
+              cloneCount: opponentPortfolioData.clone_count,
+              tags: opponentPortfolioData.tags || [],
+            };
+
+            opponentReturnPercent = await calculatePortfolioReturnForPeriod(
+              opponentPortfolio,
+              startDate,
+              endDate,
+              baseUrl
+            );
+          }
+        }
+
+        // Determine winner
+        let winnerId: string | null = null;
+        let xpAwarded = 0;
+
+        if (challengerReturnPercent > opponentReturnPercent) {
+          winnerId = challenge.challenger_id;
+          xpAwarded = challenge.type === 'sp500' ? CHALLENGE_XP.VS_SP500 : CHALLENGE_XP.VS_USER;
+        } else if (opponentReturnPercent > challengerReturnPercent) {
+          winnerId = challenge.type === 'sp500' ? 'sp500' : challenge.opponent_id;
+          xpAwarded = challenge.type === 'sp500' ? CHALLENGE_XP.VS_SP500 : CHALLENGE_XP.VS_USER;
+        }
+        // If equal, it's a draw - no XP awarded
+
+        // Calculate end values based on returns
+        const challengerEndValue = (challenge.challenger_start_value || 10000) * (1 + challengerReturnPercent / 100);
+        const opponentEndValue = (challenge.opponent_start_value || 10000) * (1 + opponentReturnPercent / 100);
+
+        // Update challenge with results
+        const { data: updated, error: updateError } = await supabase
+          .from('challenges')
+          .update({
+            status: 'completed',
+            challenger_end_value: challengerEndValue,
+            opponent_end_value: opponentEndValue,
+            challenger_return_percent: challengerReturnPercent,
+            opponent_return_percent: opponentReturnPercent,
+            winner_id: winnerId,
+            xp_awarded: xpAwarded,
+            settled_at: new Date().toISOString(),
+          })
+          .eq('id', challenge.id)
+          .select()
+          .single();
+
+        if (updateError) {
+          errors.push(`Failed to settle challenge ${challenge.id}: ${updateError.message}`);
+          continue;
+        }
+
+        // Award/deduct XP and create notifications
+        if (xpAwarded > 0) {
+          if (challenge.type === 'sp500') {
+            // VS S&P 500: winner gets XP, loser loses XP
+            const xpChange = winnerId === challenge.challenger_id ? xpAwarded : -xpAwarded;
+            await updateUserXP(challenge.challenger_id, xpChange);
+
+            // Create notification for challenger
+            await createChallengeNotification(
+              challenge.challenger_id,
+              winnerId === challenge.challenger_id ? 'challenge_won' : 'challenge_lost',
+              challenge.id,
+              Math.abs(xpChange),
+              'S&P 500'
+            );
+          } else if (winnerId) {
+            // VS User: winner gets XP, loser loses XP
+            await updateUserXP(
+              challenge.challenger_id,
+              winnerId === challenge.challenger_id ? xpAwarded : -xpAwarded
+            );
+            await updateUserXP(
+              challenge.opponent_id,
+              winnerId === challenge.opponent_id ? xpAwarded : -xpAwarded
+            );
+
+            // Create notifications for both users
+            const { data: winnerData } = await supabase
+              .from('users')
+              .select('username')
+              .eq('id', winnerId)
+              .single();
+
+            await createChallengeNotification(
+              challenge.challenger_id,
+              winnerId === challenge.challenger_id ? 'challenge_won' : 'challenge_lost',
+              challenge.id,
+              xpAwarded,
+              winnerData?.username || 'opponent'
+            );
+
+            await createChallengeNotification(
+              challenge.opponent_id,
+              winnerId === challenge.opponent_id ? 'challenge_won' : 'challenge_lost',
+              challenge.id,
+              xpAwarded,
+              winnerData?.username || 'opponent'
+            );
+          }
+        } else {
+          // Draw - notify both users
+          await createChallengeNotification(
+            challenge.challenger_id,
+            'challenge_draw',
+            challenge.id,
+            0,
+            challenge.type === 'sp500' ? 'S&P 500' : 'opponent'
+          );
+
+          if (challenge.opponent_id) {
+            await createChallengeNotification(
+              challenge.opponent_id,
+              'challenge_draw',
+              challenge.id,
+              0,
+              'opponent'
+            );
+          }
+        }
+
+        settledChallenges.push(updated);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        errors.push(`Error settling challenge ${challenge.id}: ${errorMessage}`);
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Settled ${settledChallenges.length} challenge(s)`,
+      settledCount: settledChallenges.length,
+      settledChallenges,
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  } catch (error) {
+    console.error('Settle challenges error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to settle challenges' },
+      { status: 500 }
+    );
+  }
+}
+
+// Helper function to update user XP
+async function updateUserXP(userId: string, xpChange: number): Promise<void> {
+  const { data: user } = await supabase
+    .from('users')
+    .select('xp')
+    .eq('id', userId)
+    .single();
+
+  if (user) {
+    const newXp = Math.max(0, (user.xp || 0) + xpChange);
+    await supabase
+      .from('users')
+      .update({ xp: newXp, updated_at: new Date().toISOString() })
+      .eq('id', userId);
+  }
+}
+
+// Helper function to create challenge notification
+async function createChallengeNotification(
+  userId: string,
+  type: 'challenge_won' | 'challenge_lost' | 'challenge_draw' | 'challenge_received' | 'challenge_accepted',
+  challengeId: string,
+  xpAmount: number,
+  opponentName: string
+): Promise<void> {
+  let message = '';
+
+  switch (type) {
+    case 'challenge_won':
+      message = `You won your challenge against ${opponentName}! +${xpAmount} XP`;
+      break;
+    case 'challenge_lost':
+      message = `You lost your challenge against ${opponentName}. -${xpAmount} XP`;
+      break;
+    case 'challenge_draw':
+      message = `Your challenge against ${opponentName} ended in a draw!`;
+      break;
+    case 'challenge_received':
+      message = `${opponentName} has challenged you to a portfolio battle!`;
+      break;
+    case 'challenge_accepted':
+      message = `${opponentName} accepted your challenge! The competition begins now.`;
+      break;
+  }
+
+  await supabase.from('notifications').insert({
+    user_id: userId,
+    type: type,
+    message,
+    is_read: false,
+    created_at: new Date().toISOString(),
+    data: { challengeId, xpAmount },
+  });
+}
+
+// GET - Check for challenges that need settling (can be called by cron job)
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const autoSettle = searchParams.get('autoSettle') === 'true';
+
+    const { data: challengesToSettle, error } = await supabase
+      .from('challenges')
+      .select('id, type, challenger_id, end_date')
+      .eq('status', 'active')
+      .lte('end_date', new Date().toISOString());
+
+    if (error) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: 500 }
+      );
+    }
+
+    // If autoSettle is true, automatically settle all pending challenges
+    if (autoSettle && challengesToSettle && challengesToSettle.length > 0) {
+      // Call the POST endpoint internally for each challenge
+      const baseUrl = getBaseUrl(request);
+
+      const settleResults = await Promise.all(
+        challengesToSettle.map(async (challenge) => {
+          try {
+            const response = await fetch(`${baseUrl}/api/challenges/settle`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ challengeId: challenge.id }),
+            });
+            return { id: challenge.id, success: response.ok };
+          } catch {
+            return { id: challenge.id, success: false };
+          }
+        })
+      );
+
+      return NextResponse.json({
+        success: true,
+        pendingSettlement: 0,
+        settled: settleResults.filter((r) => r.success).length,
+        failed: settleResults.filter((r) => !r.success).length,
+      });
+    }
+
+    return NextResponse.json({
+      success: true,
+      pendingSettlement: challengesToSettle?.length || 0,
+      challenges: challengesToSettle,
+    });
+  } catch (error) {
+    console.error('Check challenges error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to check challenges' },
+      { status: 500 }
+    );
+  }
+}

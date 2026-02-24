@@ -128,12 +128,12 @@ export default function DashboardPage() {
   }, [topPerformersData]);
   const levelInfo = currentUser ? calculateLevel(currentUser.xp) : null;
 
-  const handleCreatePortfolio = () => {
+  const handleCreatePortfolio = async () => {
     if (!newPortfolioName.trim()) return;
     if (!canCreateTeam()) return;
 
     try {
-      const portfolio = createPortfolio(newPortfolioName, newPortfolioDesc, selectedFormation);
+      const portfolio = await createPortfolio(newPortfolioName, newPortfolioDesc, selectedFormation);
       setShowCreateModal(false);
       setNewPortfolioName('');
       setNewPortfolioDesc('');
@@ -265,10 +265,8 @@ export default function DashboardPage() {
               <div className="flex items-center gap-2">
                 {!canCreateTeam() && (
                   <Button
-                    onClick={() => {
-                      if (unlockTeamSlot()) {
-                        // Successfully unlocked
-                      }
+                    onClick={async () => {
+                      await unlockTeamSlot();
                     }}
                     size="sm"
                     variant="outline"

@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyPassword } from '@/lib/auth';
-import { User, UserCredentials, AuthResponse } from '@/types';
+import { AuthResponse } from '@/types';
+import { supabase } from '@/lib/supabase';
 
 interface LoginRequestBody {
   identifier: string; // username or email
   password: string;
-  // Since localStorage isn't available server-side, client sends stored data
-  storedUser?: User;
-  storedCredentials?: UserCredentials;
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body: LoginRequestBody = await request.json();
-    const { identifier, password, storedUser, storedCredentials } = body;
+    const { identifier, password } = body;
 
     // Validate inputs
     if (!identifier || !identifier.trim()) {
@@ -30,20 +28,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if user and credentials were provided
-    if (!storedUser || !storedCredentials) {
+    const normalizedIdentifier = identifier.toLowerCase().trim();
+
+    // Find user by username or email
+    const { data: dbUser, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .or(`username.eq.${normalizedIdentifier},email.eq.${normalizedIdentifier}`)
+      .single();
+
+    if (userError || !dbUser) {
       return NextResponse.json<AuthResponse>(
         { success: false, error: 'Invalid username/email or password' },
         { status: 401 }
       );
     }
 
-    // Verify the identifier matches the user
-    const normalizedIdentifier = identifier.toLowerCase().trim();
-    const matchesUsername = storedUser.username.toLowerCase() === normalizedIdentifier;
-    const matchesEmail = storedUser.email.toLowerCase() === normalizedIdentifier;
+    // Get credentials
+    const { data: credentials, error: credError } = await supabase
+      .from('user_credentials')
+      .select('*')
+      .eq('user_id', dbUser.id)
+      .single();
 
-    if (!matchesUsername && !matchesEmail) {
+    if (credError || !credentials) {
       return NextResponse.json<AuthResponse>(
         { success: false, error: 'Invalid username/email or password' },
         { status: 401 }
@@ -53,8 +61,8 @@ export async function POST(request: NextRequest) {
     // Verify password
     const isValidPassword = await verifyPassword(
       password,
-      storedCredentials.passwordHash,
-      storedCredentials.salt
+      credentials.password_hash,
+      credentials.salt
     );
 
     if (!isValidPassword) {
@@ -64,10 +72,58 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Password verified, return success with user
+    // Get user's followers
+    const { data: followers } = await supabase
+      .from('followers')
+      .select('follower_id')
+      .eq('following_id', dbUser.id);
+
+    // Get user's following
+    const { data: following } = await supabase
+      .from('followers')
+      .select('following_id')
+      .eq('follower_id', dbUser.id);
+
+    // Get user's portfolios
+    const { data: portfolios } = await supabase
+      .from('portfolios')
+      .select('id')
+      .eq('user_id', dbUser.id);
+
+    // Get user's badges
+    const { data: badges } = await supabase
+      .from('badges')
+      .select('*')
+      .eq('user_id', dbUser.id);
+
+    // Convert database user to app user format
+    const user = {
+      id: dbUser.id,
+      username: dbUser.username,
+      email: dbUser.email,
+      displayName: dbUser.display_name,
+      avatar: dbUser.avatar,
+      bio: dbUser.bio,
+      joinedAt: dbUser.joined_at,
+      followers: followers?.map(f => f.follower_id) || [],
+      following: following?.map(f => f.following_id) || [],
+      portfolios: portfolios?.map(p => p.id) || [],
+      totalRewards: dbUser.total_rewards,
+      badges: badges?.map(b => ({
+        id: b.id,
+        name: b.name,
+        description: b.description,
+        icon: b.icon,
+        earnedAt: b.earned_at,
+      })) || [],
+      level: dbUser.level,
+      xp: dbUser.xp,
+      maxTeams: dbUser.max_teams,
+    };
+
     return NextResponse.json<AuthResponse>({
       success: true,
-      user: storedUser,
+      user,
     });
   } catch (error) {
     console.error('Login error:', error);

@@ -19,3 +19,6 @@ export { LeaderboardTable } from './leaderboard/LeaderboardTable';
 
 // Compare Components
 export * from './compare';
+
+// Challenge Components
+export * from './challenge';

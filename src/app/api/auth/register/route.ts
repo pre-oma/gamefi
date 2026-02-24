@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { hashPassword, validatePassword, validateEmail, validateUsername } from '@/lib/auth';
-import { User, UserCredentials, AuthResponse, DEFAULT_MAX_TEAMS } from '@/types';
+import { AuthResponse, DEFAULT_MAX_TEAMS } from '@/types';
+import { supabase } from '@/lib/supabase';
 
 interface RegisterRequestBody {
   username: string;
@@ -39,49 +40,96 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check if username or email already exists
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .or(`username.eq.${username.toLowerCase()},email.eq.${email.toLowerCase()}`)
+      .single();
+
+    if (existingUser) {
+      return NextResponse.json<AuthResponse>(
+        { success: false, error: 'Username or email already exists' },
+        { status: 400 }
+      );
+    }
+
     // Hash password
     const { hash, salt } = await hashPassword(password);
 
-    // Generate IDs
+    // Generate user ID
     const userId = uuidv4();
-    const credentialId = uuidv4();
     const now = new Date().toISOString();
 
-    // Create user object
-    const user: User = {
-      id: userId,
-      username: username.toLowerCase(),
-      email: email.toLowerCase(),
-      displayName: username,
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
-      bio: 'New investor on Gamefi Invest!',
-      joinedAt: now,
+    // Insert user into database
+    const { data: newUser, error: userError } = await supabase
+      .from('users')
+      .insert({
+        id: userId,
+        username: username.toLowerCase(),
+        email: email.toLowerCase(),
+        display_name: username,
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
+        bio: 'New investor on Gamefi Invest!',
+        joined_at: now,
+        total_rewards: 0,
+        level: 1,
+        xp: 0,
+        max_teams: DEFAULT_MAX_TEAMS,
+      })
+      .select()
+      .single();
+
+    if (userError) {
+      console.error('User insert error:', userError);
+      return NextResponse.json<AuthResponse>(
+        { success: false, error: 'Failed to create user' },
+        { status: 500 }
+      );
+    }
+
+    // Insert credentials
+    const { error: credError } = await supabase
+      .from('user_credentials')
+      .insert({
+        id: uuidv4(),
+        user_id: userId,
+        password_hash: hash,
+        salt: salt,
+      });
+
+    if (credError) {
+      console.error('Credentials insert error:', credError);
+      // Rollback user creation
+      await supabase.from('users').delete().eq('id', userId);
+      return NextResponse.json<AuthResponse>(
+        { success: false, error: 'Failed to create user credentials' },
+        { status: 500 }
+      );
+    }
+
+    // Convert database user to app user format
+    const user = {
+      id: newUser.id,
+      username: newUser.username,
+      email: newUser.email,
+      displayName: newUser.display_name,
+      avatar: newUser.avatar,
+      bio: newUser.bio,
+      joinedAt: newUser.joined_at,
       followers: [],
       following: [],
       portfolios: [],
-      totalRewards: 0,
+      totalRewards: newUser.total_rewards,
       badges: [],
-      level: 1,
-      xp: 0,
-      maxTeams: DEFAULT_MAX_TEAMS,
+      level: newUser.level,
+      xp: newUser.xp,
+      maxTeams: newUser.max_teams,
     };
 
-    // Create credentials object
-    const credentials: UserCredentials = {
-      id: credentialId,
-      userId: userId,
-      passwordHash: hash,
-      salt: salt,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    // Return the created objects for client-side storage
-    // Note: In a real app, this would be stored server-side in a database
     return NextResponse.json({
       success: true,
       user,
-      credentials,
     });
   } catch (error) {
     console.error('Registration error:', error);

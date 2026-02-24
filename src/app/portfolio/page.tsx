@@ -25,14 +25,18 @@ export default function PortfolioListPage() {
     }
   }, [isAuthenticated, isLoading, router]);
 
-  const handleCreatePortfolio = () => {
+  const handleCreatePortfolio = async () => {
     if (!newPortfolioName.trim()) return;
 
-    const portfolio = createPortfolio(newPortfolioName, newPortfolioDesc, selectedFormation);
-    setShowCreateModal(false);
-    setNewPortfolioName('');
-    setNewPortfolioDesc('');
-    router.push(`/portfolio/${portfolio.id}`);
+    try {
+      const portfolio = await createPortfolio(newPortfolioName, newPortfolioDesc, selectedFormation);
+      setShowCreateModal(false);
+      setNewPortfolioName('');
+      setNewPortfolioDesc('');
+      router.push(`/portfolio/${portfolio.id}`);
+    } catch (error) {
+      console.error('Failed to create portfolio:', error);
+    }
   };
 
   if (isLoading || !isAuthenticated) {

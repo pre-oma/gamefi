@@ -2,6 +2,51 @@
 export const DEFAULT_MAX_TEAMS = 3;
 export const TEAM_SLOT_UNLOCK_COST = 1000; // XP cost to unlock additional team slot
 
+// Challenge Types
+export type ChallengeType = 'sp500' | 'user';
+export type ChallengeStatus = 'pending' | 'active' | 'completed' | 'declined' | 'cancelled';
+export type ChallengeTimeframe = '1W' | '2W' | '1M' | '3M';
+
+export interface Challenge {
+  id: string;
+  type: ChallengeType;
+  status: ChallengeStatus;
+  challengerId: string;
+  challengerPortfolioId: string;
+  opponentId: string | null;
+  opponentPortfolioId: string | null;
+  timeframe: ChallengeTimeframe;
+  startDate: string | null;
+  endDate: string | null;
+  challengerStartValue: number | null;
+  challengerEndValue: number | null;
+  opponentStartValue: number | null;
+  opponentEndValue: number | null;
+  challengerReturnPercent: number | null;
+  opponentReturnPercent: number | null;
+  winnerId: string | null;
+  xpAwarded: number | null;
+  createdAt: string;
+  settledAt: string | null;
+  // Joined data for display
+  challengerUsername?: string;
+  challengerAvatar?: string;
+  challengerPortfolioName?: string;
+  opponentUsername?: string;
+  opponentAvatar?: string;
+  opponentPortfolioName?: string;
+}
+
+export const CHALLENGE_XP = { VS_SP500: 100, VS_USER: 200 };
+export const MAX_ACTIVE_CHALLENGES = 3;
+
+export const CHALLENGE_TIMEFRAMES: { value: ChallengeTimeframe; label: string; days: number }[] = [
+  { value: '1W', label: '1 Week', days: 7 },
+  { value: '2W', label: '2 Weeks', days: 14 },
+  { value: '1M', label: '1 Month', days: 30 },
+  { value: '3M', label: '3 Months', days: 90 },
+];
+
 // User Types
 export interface User {
   id: string;
@@ -264,10 +309,23 @@ export interface Activity {
   timestamp: string;
 }
 
+export type NotificationType =
+  | 'new_follower'
+  | 'portfolio_liked'
+  | 'portfolio_cloned'
+  | 'badge_earned'
+  | 'reward_earned'
+  | 'challenge_received'
+  | 'challenge_accepted'
+  | 'challenge_declined'
+  | 'challenge_won'
+  | 'challenge_lost'
+  | 'challenge_draw';
+
 export interface Notification {
   id: string;
   userId: string;
-  type: 'new_follower' | 'portfolio_liked' | 'portfolio_cloned' | 'badge_earned' | 'reward_earned';
+  type: NotificationType;
   message: string;
   read: boolean;
   createdAt: string;

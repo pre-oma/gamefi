@@ -16,7 +16,7 @@ import {
   Cell,
 } from 'recharts';
 import { useStore } from '@/store/useStore';
-import { portfolioStorage, userStorage } from '@/lib/storage';
+// Storage imports removed - now using API
 import { Header, Button, FormationField, AssetSelector, Modal, DateRangePicker } from '@/components';
 import { Position, PortfolioPlayer, Portfolio } from '@/types';
 import {
@@ -60,16 +60,42 @@ export default function PortfolioDetailPage() {
   const [dateRangeStart, setDateRangeStart] = useState<Date | null>(null);
   const [dateRangeEnd, setDateRangeEnd] = useState<Date | null>(null);
 
+  const [owner, setOwner] = useState<any>(null);
+
   useEffect(() => {
     loadData();
   }, [loadData]);
 
   useEffect(() => {
-    const p = portfolioStorage.getById(portfolioId);
-    setPortfolio(p || null);
+    const fetchPortfolio = async () => {
+      try {
+        const res = await fetch(`/api/portfolios?id=${portfolioId}`);
+        const data = await res.json();
+        if (data.success && data.portfolios?.length > 0) {
+          setPortfolio(data.portfolios[0]);
+        }
+      } catch (error) {
+        console.error('Failed to fetch portfolio:', error);
+      }
+    };
+    fetchPortfolio();
   }, [portfolioId]);
 
-  const owner = portfolio ? userStorage.getUserById(portfolio.userId) : null;
+  useEffect(() => {
+    const fetchOwner = async () => {
+      if (!portfolio) return;
+      try {
+        const res = await fetch(`/api/users?id=${portfolio.userId}`);
+        const data = await res.json();
+        if (data.success) {
+          setOwner(data.user);
+        }
+      } catch (error) {
+        console.error('Failed to fetch owner:', error);
+      }
+    };
+    fetchOwner();
+  }, [portfolio]);
   const isOwner = currentUser?.id === portfolio?.userId;
   const hasLiked = currentUser && portfolio ? portfolio.likes.includes(currentUser.id) : false;
 
@@ -121,30 +147,42 @@ export default function PortfolioDetailPage() {
     setSelectedPosition({ player, position });
   };
 
-  const handleAssetSelect = (asset: any) => {
+  const handleAssetSelect = async (asset: any) => {
     if (!selectedPosition || !portfolio) return;
-    assignAssetToPosition(portfolio.id, selectedPosition.player.positionId, asset);
-    setPortfolio(portfolioStorage.getById(portfolio.id) || null);
+    await assignAssetToPosition(portfolio.id, selectedPosition.player.positionId, asset);
+    // Refresh portfolio from API
+    const res = await fetch(`/api/portfolios?id=${portfolio.id}`);
+    const data = await res.json();
+    if (data.success && data.portfolios?.length > 0) {
+      setPortfolio(data.portfolios[0]);
+    }
     setSelectedPosition(null);
   };
 
-  const handleLike = () => {
+  const handleLike = async () => {
     if (!portfolio) return;
     likePortfolio(portfolio.id);
-    setPortfolio(portfolioStorage.getById(portfolio.id) || null);
+    // Update local state for likes
+    const hasLikedNow = portfolio.likes.includes(currentUser?.id || '');
+    setPortfolio({
+      ...portfolio,
+      likes: hasLikedNow
+        ? portfolio.likes.filter(id => id !== currentUser?.id)
+        : [...portfolio.likes, currentUser?.id || ''],
+    });
   };
 
-  const handleClone = () => {
+  const handleClone = async () => {
     if (!portfolio) return;
-    const cloned = clonePortfolio(portfolio.id);
+    const cloned = await clonePortfolio(portfolio.id);
     if (cloned) {
       router.push(`/portfolio/${cloned.id}`);
     }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!portfolio) return;
-    deletePortfolio(portfolio.id);
+    await deletePortfolio(portfolio.id);
     router.push('/dashboard');
   };
 

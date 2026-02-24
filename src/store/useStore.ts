@@ -9,14 +9,34 @@ import {
   Formation,
   Activity,
   Notification,
-  Badge,
   Asset,
+  Challenge,
+  ChallengeType,
+  ChallengeTimeframe,
   FORMATIONS,
   DEFAULT_MAX_TEAMS,
   TEAM_SLOT_UNLOCK_COST,
+  MAX_ACTIVE_CHALLENGES,
+  CHALLENGE_XP,
 } from '@/types';
-import { userStorage, portfolioStorage, activityStorage, notificationStorage, credentialStorage } from '@/lib/storage';
-import { AuthResponse, UserCredentials } from '@/types';
+import { AuthResponse } from '@/types';
+
+// Simple session storage for current user ID
+const SESSION_KEY = 'gamefi_session';
+
+const getStoredSession = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(SESSION_KEY);
+};
+
+const setStoredSession = (userId: string | null) => {
+  if (typeof window === 'undefined') return;
+  if (userId) {
+    localStorage.setItem(SESSION_KEY, userId);
+  } else {
+    localStorage.removeItem(SESSION_KEY);
+  }
+};
 
 interface AppState {
   // Auth state
@@ -30,22 +50,29 @@ interface AppState {
   activities: Activity[];
   notifications: Notification[];
 
+  // Challenge state
+  challenges: Challenge[];
+  pendingChallenges: Challenge[];
+  activeChallenges: Challenge[];
+  completedChallenges: Challenge[];
+  challengesLoading: boolean;
+
   // Actions - Auth
   login: (identifier: string, password: string) => Promise<AuthResponse>;
   register: (username: string, email: string, password: string) => Promise<AuthResponse>;
   logout: () => void;
-  updateProfile: (updates: Partial<User>) => void;
+  updateProfile: (updates: Partial<User>) => Promise<void>;
 
   // Actions - Portfolio
-  createPortfolio: (name: string, description: string, formation: Formation) => Portfolio;
-  updatePortfolio: (id: string, updates: Partial<Portfolio>) => void;
-  deletePortfolio: (id: string) => void;
-  assignAssetToPosition: (portfolioId: string, positionId: string, asset: Asset | null) => void;
+  createPortfolio: (name: string, description: string, formation: Formation) => Promise<Portfolio>;
+  updatePortfolio: (id: string, updates: Partial<Portfolio>) => Promise<void>;
+  deletePortfolio: (id: string) => Promise<void>;
+  assignAssetToPosition: (portfolioId: string, positionId: string, asset: Asset | null) => Promise<void>;
   likePortfolio: (portfolioId: string) => void;
-  clonePortfolio: (portfolioId: string) => Portfolio | null;
+  clonePortfolio: (portfolioId: string) => Promise<Portfolio | null>;
   canCreateTeam: () => boolean;
   getTeamSlotInfo: () => { current: number; max: number; canUnlock: boolean; unlockCost: number };
-  unlockTeamSlot: () => boolean;
+  unlockTeamSlot: () => Promise<boolean>;
 
   // Actions - Social
   followUser: (targetUserId: string) => void;
@@ -55,9 +82,24 @@ interface AppState {
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: () => void;
 
+  // Actions - Challenges
+  loadChallenges: () => Promise<void>;
+  createChallenge: (
+    portfolioId: string,
+    type: ChallengeType,
+    timeframe: ChallengeTimeframe,
+    opponentId?: string,
+    opponentPortfolioId?: string
+  ) => Promise<{ success: boolean; error?: string; challenge?: Challenge }>;
+  acceptChallenge: (challengeId: string, portfolioId: string) => Promise<{ success: boolean; error?: string }>;
+  declineChallenge: (challengeId: string) => Promise<{ success: boolean; error?: string }>;
+  cancelChallenge: (challengeId: string) => Promise<{ success: boolean; error?: string }>;
+  getActiveChallengesCount: () => number;
+  canCreateChallenge: (type: ChallengeType) => { canCreate: boolean; reason?: string };
+
   // Actions - Data loading
-  loadData: () => void;
-  refreshPortfolios: () => void;
+  loadData: () => Promise<void>;
+  refreshPortfolios: () => Promise<void>;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -70,47 +112,35 @@ export const useStore = create<AppState>((set, get) => ({
   activities: [],
   notifications: [],
 
+  // Challenge initial state
+  challenges: [],
+  pendingChallenges: [],
+  activeChallenges: [],
+  completedChallenges: [],
+  challengesLoading: false,
+
   // Auth actions
   login: async (identifier: string, password: string): Promise<AuthResponse> => {
-    // Find user by username or email
-    const normalizedIdentifier = identifier.toLowerCase().trim();
-    let user = userStorage.getUserByUsername(normalizedIdentifier);
-    if (!user) {
-      user = userStorage.getUserByEmail(normalizedIdentifier);
-    }
-
-    if (!user) {
-      return { success: false, error: 'Invalid username/email or password' };
-    }
-
-    // Get credentials for user
-    const credentials = credentialStorage.getByUserId(user.id);
-    if (!credentials) {
-      return { success: false, error: 'Invalid username/email or password' };
-    }
-
-    // Call login API to verify password
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          identifier,
-          password,
-          storedUser: user,
-          storedCredentials: credentials,
-        }),
+        body: JSON.stringify({ identifier, password }),
       });
 
       const result: AuthResponse = await response.json();
 
       if (result.success && result.user) {
-        userStorage.setCurrentUser(result.user);
+        setStoredSession(result.user.id);
+
+        // Fetch user's portfolios
+        const portfolioRes = await fetch(`/api/portfolios?userId=${result.user.id}`);
+        const portfolioData = await portfolioRes.json();
+
         set({
           currentUser: result.user,
           isAuthenticated: true,
-          portfolios: portfolioStorage.getByUserId(result.user.id),
-          notifications: notificationStorage.getByUserId(result.user.id),
+          portfolios: portfolioData.success ? portfolioData.portfolios : [],
         });
       }
 
@@ -121,17 +151,6 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   register: async (username: string, email: string, password: string): Promise<AuthResponse> => {
-    // Check if username already exists
-    if (userStorage.getUserByUsername(username)) {
-      return { success: false, error: 'Username is already taken' };
-    }
-
-    // Check if email already exists
-    if (userStorage.getUserByEmail(email)) {
-      return { success: false, error: 'Email is already registered' };
-    }
-
-    // Call register API
     try {
       const response = await fetch('/api/auth/register', {
         method: 'POST',
@@ -145,25 +164,8 @@ export const useStore = create<AppState>((set, get) => ({
         return { success: false, error: result.error };
       }
 
-      const { user, credentials } = result as { user: User; credentials: UserCredentials };
-
-      // Save user and credentials to localStorage
-      userStorage.saveUser(user);
-      credentialStorage.save(credentials);
-      userStorage.setCurrentUser(user);
-
-      // Add welcome activity
-      const activity: Activity = {
-        id: uuidv4(),
-        userId: user.id,
-        username: user.username,
-        avatar: user.avatar,
-        type: 'followed_user',
-        targetId: user.id,
-        targetName: 'Gamefi Invest',
-        timestamp: new Date().toISOString(),
-      };
-      activityStorage.add(activity);
+      const { user } = result as { user: User };
+      setStoredSession(user.id);
 
       set({
         currentUser: user,
@@ -179,7 +181,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   logout: () => {
-    userStorage.setCurrentUser(null);
+    setStoredSession(null);
     set({
       currentUser: null,
       isAuthenticated: false,
@@ -188,64 +190,83 @@ export const useStore = create<AppState>((set, get) => ({
     });
   },
 
-  updateProfile: (updates: Partial<User>) => {
+  updateProfile: async (updates: Partial<User>) => {
     const { currentUser } = get();
     if (!currentUser) return;
 
-    const updatedUser = { ...currentUser, ...updates };
-    userStorage.saveUser(updatedUser);
-    userStorage.setCurrentUser(updatedUser);
+    try {
+      const response = await fetch('/api/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: currentUser.id, ...updates }),
+      });
 
-    set({ currentUser: updatedUser });
+      if (response.ok) {
+        const updatedUser = { ...currentUser, ...updates };
+        set({ currentUser: updatedUser });
+      }
+    } catch (error) {
+      console.error('Failed to update profile:', error);
+    }
   },
 
   // Portfolio actions
   canCreateTeam: () => {
-    const { currentUser } = get();
+    const { currentUser, portfolios } = get();
     if (!currentUser) return false;
     const maxTeams = currentUser.maxTeams ?? DEFAULT_MAX_TEAMS;
-    return currentUser.portfolios.length < maxTeams;
+    return portfolios.length < maxTeams;
   },
 
   getTeamSlotInfo: () => {
-    const { currentUser } = get();
+    const { currentUser, portfolios } = get();
     if (!currentUser) {
       return { current: 0, max: DEFAULT_MAX_TEAMS, canUnlock: false, unlockCost: TEAM_SLOT_UNLOCK_COST };
     }
     const maxTeams = currentUser.maxTeams ?? DEFAULT_MAX_TEAMS;
     const canUnlock = currentUser.xp >= TEAM_SLOT_UNLOCK_COST;
     return {
-      current: currentUser.portfolios.length,
+      current: portfolios.length,
       max: maxTeams,
       canUnlock,
       unlockCost: TEAM_SLOT_UNLOCK_COST,
     };
   },
 
-  unlockTeamSlot: () => {
+  unlockTeamSlot: async () => {
     const { currentUser } = get();
     if (!currentUser) return false;
     if (currentUser.xp < TEAM_SLOT_UNLOCK_COST) return false;
 
-    const currentMaxTeams = currentUser.maxTeams ?? DEFAULT_MAX_TEAMS;
-    const updatedUser = {
-      ...currentUser,
-      xp: currentUser.xp - TEAM_SLOT_UNLOCK_COST,
-      maxTeams: currentMaxTeams + 1,
-    };
+    try {
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: currentUser.id, action: 'unlockTeamSlot' }),
+      });
 
-    userStorage.saveUser(updatedUser);
-    userStorage.setCurrentUser(updatedUser);
-    set({ currentUser: updatedUser });
+      const result = await response.json();
 
-    return true;
+      if (result.success) {
+        const updatedUser = {
+          ...currentUser,
+          xp: result.xp,
+          maxTeams: result.maxTeams,
+        };
+        set({ currentUser: updatedUser });
+        return true;
+      }
+    } catch (error) {
+      console.error('Failed to unlock team slot:', error);
+    }
+
+    return false;
   },
 
-  createPortfolio: (name: string, description: string, formation: Formation) => {
+  createPortfolio: async (name: string, description: string, formation: Formation) => {
     const { currentUser, canCreateTeam } = get();
     if (!currentUser) throw new Error('Must be logged in');
 
-    // Check team limit
     if (!canCreateTeam()) {
       throw new Error('Team limit reached. Unlock more slots with XP.');
     }
@@ -254,122 +275,110 @@ export const useStore = create<AppState>((set, get) => ({
     const players: PortfolioPlayer[] = positions.map((pos) => ({
       positionId: pos.id,
       asset: null,
-      allocation: 100 / 11, // ~9.09% each
+      allocation: 100 / 11,
     }));
 
-    const portfolio: Portfolio = {
-      id: uuidv4(),
-      userId: currentUser.id,
-      name,
-      description,
-      formation,
-      players,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      isPublic: true,
-      likes: [],
-      clonedFrom: null,
-      cloneCount: 0,
-      tags: [],
-    };
+    const response = await fetch('/api/portfolios', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: currentUser.id,
+        name,
+        description,
+        formation,
+        players,
+        isPublic: true,
+        tags: [],
+      }),
+    });
 
-    portfolioStorage.save(portfolio);
+    const result = await response.json();
 
-    // Update user's portfolio list
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to create portfolio');
+    }
+
+    const portfolio = result.portfolio;
+
+    // Update user XP locally
     const updatedUser = {
       ...currentUser,
       portfolios: [...currentUser.portfolios, portfolio.id],
       xp: currentUser.xp + 50,
     };
-    userStorage.saveUser(updatedUser);
-    userStorage.setCurrentUser(updatedUser);
 
-    // Add activity
-    const activity: Activity = {
-      id: uuidv4(),
-      userId: currentUser.id,
-      username: currentUser.username,
-      avatar: currentUser.avatar,
-      type: 'created_portfolio',
-      targetId: portfolio.id,
-      targetName: portfolio.name,
-      timestamp: new Date().toISOString(),
-    };
-    activityStorage.add(activity);
+    // Update user in database
+    await fetch('/api/users', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: currentUser.id, xp: updatedUser.xp }),
+    });
 
     set({
       currentUser: updatedUser,
       portfolios: [...get().portfolios, portfolio],
-      publicPortfolios: portfolioStorage.getPublic(),
     });
 
     return portfolio;
   },
 
-  updatePortfolio: (id: string, updates: Partial<Portfolio>) => {
-    const portfolio = portfolioStorage.getById(id);
-    if (!portfolio) return;
-
-    const updated = {
-      ...portfolio,
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    };
-
-    portfolioStorage.save(updated);
-
-    set({
-      portfolios: get().portfolios.map((p) => (p.id === id ? updated : p)),
-      publicPortfolios: portfolioStorage.getPublic(),
+  updatePortfolio: async (id: string, updates: Partial<Portfolio>) => {
+    const response = await fetch('/api/portfolios', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, ...updates }),
     });
+
+    const result = await response.json();
+
+    if (result.success) {
+      set({
+        portfolios: get().portfolios.map((p) =>
+          p.id === id ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
+        ),
+      });
+    }
   },
 
-  deletePortfolio: (id: string) => {
+  deletePortfolio: async (id: string) => {
     const { currentUser } = get();
     if (!currentUser) return;
 
-    portfolioStorage.delete(id);
-
-    const updatedUser = {
-      ...currentUser,
-      portfolios: currentUser.portfolios.filter((pid) => pid !== id),
-    };
-    userStorage.saveUser(updatedUser);
-    userStorage.setCurrentUser(updatedUser);
-
-    set({
-      currentUser: updatedUser,
-      portfolios: get().portfolios.filter((p) => p.id !== id),
-      publicPortfolios: portfolioStorage.getPublic(),
+    const response = await fetch(`/api/portfolios?id=${id}`, {
+      method: 'DELETE',
     });
+
+    const result = await response.json();
+
+    if (result.success) {
+      const updatedUser = {
+        ...currentUser,
+        portfolios: currentUser.portfolios.filter((pid) => pid !== id),
+      };
+
+      set({
+        currentUser: updatedUser,
+        portfolios: get().portfolios.filter((p) => p.id !== id),
+      });
+    }
   },
 
-  assignAssetToPosition: (portfolioId: string, positionId: string, asset: Asset | null) => {
-    const portfolio = portfolioStorage.getById(portfolioId);
+  assignAssetToPosition: async (portfolioId: string, positionId: string, asset: Asset | null) => {
+    const portfolio = get().portfolios.find((p) => p.id === portfolioId);
     if (!portfolio) return;
 
     const updatedPlayers = portfolio.players.map((player) =>
       player.positionId === positionId ? { ...player, asset } : player
     );
 
-    const updated = {
-      ...portfolio,
-      players: updatedPlayers,
-      updatedAt: new Date().toISOString(),
-    };
-
-    portfolioStorage.save(updated);
-
-    set({
-      portfolios: get().portfolios.map((p) => (p.id === portfolioId ? updated : p)),
-    });
+    await get().updatePortfolio(portfolioId, { players: updatedPlayers });
   },
 
   likePortfolio: (portfolioId: string) => {
     const { currentUser } = get();
     if (!currentUser) return;
 
-    const portfolio = portfolioStorage.getById(portfolioId);
+    const portfolio = get().portfolios.find((p) => p.id === portfolioId);
     if (!portfolio) return;
 
     const hasLiked = portfolio.likes.includes(currentUser.id);
@@ -377,166 +386,71 @@ export const useStore = create<AppState>((set, get) => ({
       ? portfolio.likes.filter((id) => id !== currentUser.id)
       : [...portfolio.likes, currentUser.id];
 
-    const updated = {
-      ...portfolio,
-      likes: updatedLikes,
-    };
-
-    portfolioStorage.save(updated);
-
-    // Add activity if liking (not unliking)
-    if (!hasLiked) {
-      const activity: Activity = {
-        id: uuidv4(),
-        userId: currentUser.id,
-        username: currentUser.username,
-        avatar: currentUser.avatar,
-        type: 'liked_portfolio',
-        targetId: portfolio.id,
-        targetName: portfolio.name,
-        timestamp: new Date().toISOString(),
-      };
-      activityStorage.add(activity);
-
-      // Notify portfolio owner
-      if (portfolio.userId !== currentUser.id) {
-        const notification: Notification = {
-          id: uuidv4(),
-          userId: portfolio.userId,
-          type: 'portfolio_liked',
-          message: `${currentUser.username} liked your portfolio "${portfolio.name}"`,
-          read: false,
-          createdAt: new Date().toISOString(),
-        };
-        notificationStorage.add(notification);
-      }
-    }
-
+    // Update locally for now (would need API endpoint for likes)
     set({
-      portfolios: get().portfolios.map((p) => (p.id === portfolioId ? updated : p)),
-      publicPortfolios: portfolioStorage.getPublic(),
+      portfolios: get().portfolios.map((p) =>
+        p.id === portfolioId ? { ...p, likes: updatedLikes } : p
+      ),
     });
   },
 
-  clonePortfolio: (portfolioId: string) => {
+  clonePortfolio: async (portfolioId: string) => {
     const { currentUser } = get();
     if (!currentUser) return null;
 
-    const original = portfolioStorage.getById(portfolioId);
+    const original = get().portfolios.find((p) => p.id === portfolioId) ||
+                    get().publicPortfolios.find((p) => p.id === portfolioId);
     if (!original) return null;
 
-    const cloned: Portfolio = {
-      ...original,
-      id: uuidv4(),
-      userId: currentUser.id,
-      name: `${original.name} (Clone)`,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      likes: [],
-      clonedFrom: original.id,
-      cloneCount: 0,
-    };
+    const response = await fetch('/api/portfolios', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: currentUser.id,
+        name: `${original.name} (Clone)`,
+        description: original.description,
+        formation: original.formation,
+        players: original.players,
+        isPublic: true,
+        tags: original.tags,
+      }),
+    });
 
-    portfolioStorage.save(cloned);
+    const result = await response.json();
 
-    // Update original's clone count
-    const updatedOriginal = {
-      ...original,
-      cloneCount: original.cloneCount + 1,
-    };
-    portfolioStorage.save(updatedOriginal);
+    if (!result.success) return null;
 
-    // Update user
+    const cloned = result.portfolio;
+
     const updatedUser = {
       ...currentUser,
       portfolios: [...currentUser.portfolios, cloned.id],
       xp: currentUser.xp + 25,
     };
-    userStorage.saveUser(updatedUser);
-    userStorage.setCurrentUser(updatedUser);
 
-    // Add activity
-    const activity: Activity = {
-      id: uuidv4(),
-      userId: currentUser.id,
-      username: currentUser.username,
-      avatar: currentUser.avatar,
-      type: 'cloned_portfolio',
-      targetId: cloned.id,
-      targetName: original.name,
-      timestamp: new Date().toISOString(),
-    };
-    activityStorage.add(activity);
-
-    // Notify original owner
-    if (original.userId !== currentUser.id) {
-      const notification: Notification = {
-        id: uuidv4(),
-        userId: original.userId,
-        type: 'portfolio_cloned',
-        message: `${currentUser.username} cloned your portfolio "${original.name}"`,
-        read: false,
-        createdAt: new Date().toISOString(),
-      };
-      notificationStorage.add(notification);
-    }
+    await fetch('/api/users', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: currentUser.id, xp: updatedUser.xp }),
+    });
 
     set({
       currentUser: updatedUser,
       portfolios: [...get().portfolios, cloned],
-      publicPortfolios: portfolioStorage.getPublic(),
     });
 
     return cloned;
   },
 
-  // Social actions
+  // Social actions (these would need API endpoints)
   followUser: (targetUserId: string) => {
     const { currentUser } = get();
     if (!currentUser || currentUser.id === targetUserId) return;
 
-    const targetUser = userStorage.getUserById(targetUserId);
-    if (!targetUser) return;
-
-    // Update current user's following
     const updatedCurrentUser = {
       ...currentUser,
       following: [...currentUser.following, targetUserId],
     };
-    userStorage.saveUser(updatedCurrentUser);
-    userStorage.setCurrentUser(updatedCurrentUser);
-
-    // Update target user's followers and award +100 XP
-    const updatedTargetUser = {
-      ...targetUser,
-      followers: [...targetUser.followers, currentUser.id],
-      xp: targetUser.xp + 100,
-    };
-    userStorage.saveUser(updatedTargetUser);
-
-    // Add activity
-    const activity: Activity = {
-      id: uuidv4(),
-      userId: currentUser.id,
-      username: currentUser.username,
-      avatar: currentUser.avatar,
-      type: 'followed_user',
-      targetId: targetUserId,
-      targetName: targetUser.username,
-      timestamp: new Date().toISOString(),
-    };
-    activityStorage.add(activity);
-
-    // Notify target user
-    const notification: Notification = {
-      id: uuidv4(),
-      userId: targetUserId,
-      type: 'new_follower',
-      message: `${currentUser.username} started following you (+100 XP!)`,
-      read: false,
-      createdAt: new Date().toISOString(),
-    };
-    notificationStorage.add(notification);
 
     set({ currentUser: updatedCurrentUser });
   },
@@ -545,64 +459,291 @@ export const useStore = create<AppState>((set, get) => ({
     const { currentUser } = get();
     if (!currentUser) return;
 
-    const targetUser = userStorage.getUserById(targetUserId);
-    if (!targetUser) return;
-
-    // Update current user
     const updatedCurrentUser = {
       ...currentUser,
       following: currentUser.following.filter((id) => id !== targetUserId),
     };
-    userStorage.saveUser(updatedCurrentUser);
-    userStorage.setCurrentUser(updatedCurrentUser);
-
-    // Update target user
-    const updatedTargetUser = {
-      ...targetUser,
-      followers: targetUser.followers.filter((id) => id !== currentUser.id),
-    };
-    userStorage.saveUser(updatedTargetUser);
 
     set({ currentUser: updatedCurrentUser });
   },
 
   // Notification actions
   markNotificationRead: (id: string) => {
-    notificationStorage.markAsRead(id);
-    const { currentUser } = get();
-    if (currentUser) {
-      set({ notifications: notificationStorage.getByUserId(currentUser.id) });
-    }
+    set({
+      notifications: get().notifications.map((n) =>
+        n.id === id ? { ...n, read: true } : n
+      ),
+    });
   },
 
   markAllNotificationsRead: () => {
+    set({
+      notifications: get().notifications.map((n) => ({ ...n, read: true })),
+    });
+  },
+
+  // Challenge actions
+  loadChallenges: async () => {
     const { currentUser } = get();
-    if (currentUser) {
-      notificationStorage.markAllAsRead(currentUser.id);
-      set({ notifications: notificationStorage.getByUserId(currentUser.id) });
+    if (!currentUser) return;
+
+    set({ challengesLoading: true });
+
+    try {
+      const response = await fetch(`/api/challenges?userId=${currentUser.id}`);
+      const data = await response.json();
+
+      if (data.success) {
+        set({
+          challenges: data.challenges || [],
+          pendingChallenges: data.pendingInvites || [],
+          activeChallenges: data.activeChallenges || [],
+          completedChallenges: data.completedChallenges || [],
+          challengesLoading: false,
+        });
+      } else {
+        set({ challengesLoading: false });
+      }
+    } catch (error) {
+      console.error('Failed to load challenges:', error);
+      set({ challengesLoading: false });
     }
   },
 
-  // Data loading
-  loadData: () => {
-    const currentUser = userStorage.getCurrentUser();
+  createChallenge: async (
+    portfolioId: string,
+    type: ChallengeType,
+    timeframe: ChallengeTimeframe,
+    opponentId?: string,
+    opponentPortfolioId?: string
+  ) => {
+    const { currentUser, canCreateChallenge, loadChallenges } = get();
+    if (!currentUser) return { success: false, error: 'Not logged in' };
 
-    set({
-      currentUser,
-      isAuthenticated: !!currentUser,
-      isLoading: false,
-      portfolios: currentUser ? portfolioStorage.getByUserId(currentUser.id) : [],
-      publicPortfolios: portfolioStorage.getPublic(),
-      activities: activityStorage.getAll(),
-      notifications: currentUser ? notificationStorage.getByUserId(currentUser.id) : [],
-    });
+    const checkResult = canCreateChallenge(type);
+    if (!checkResult.canCreate) {
+      return { success: false, error: checkResult.reason };
+    }
+
+    try {
+      const response = await fetch('/api/challenges', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          challengerId: currentUser.id,
+          challengerPortfolioId: portfolioId,
+          type,
+          timeframe,
+          opponentId,
+          opponentPortfolioId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        await loadChallenges();
+        return { success: true, challenge: data.challenge };
+      }
+
+      return { success: false, error: data.error };
+    } catch (error) {
+      console.error('Failed to create challenge:', error);
+      return { success: false, error: 'Failed to create challenge' };
+    }
   },
 
-  refreshPortfolios: () => {
+  acceptChallenge: async (challengeId: string, portfolioId: string) => {
+    const { currentUser, loadChallenges } = get();
+    if (!currentUser) return { success: false, error: 'Not logged in' };
+
+    try {
+      const response = await fetch('/api/challenges', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          challengeId,
+          action: 'accept',
+          userId: currentUser.id,
+          portfolioId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        await loadChallenges();
+        return { success: true };
+      }
+
+      return { success: false, error: data.error };
+    } catch (error) {
+      console.error('Failed to accept challenge:', error);
+      return { success: false, error: 'Failed to accept challenge' };
+    }
+  },
+
+  declineChallenge: async (challengeId: string) => {
+    const { currentUser, loadChallenges } = get();
+    if (!currentUser) return { success: false, error: 'Not logged in' };
+
+    try {
+      const response = await fetch('/api/challenges', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          challengeId,
+          action: 'decline',
+          userId: currentUser.id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        await loadChallenges();
+        return { success: true };
+      }
+
+      return { success: false, error: data.error };
+    } catch (error) {
+      console.error('Failed to decline challenge:', error);
+      return { success: false, error: 'Failed to decline challenge' };
+    }
+  },
+
+  cancelChallenge: async (challengeId: string) => {
+    const { currentUser, loadChallenges } = get();
+    if (!currentUser) return { success: false, error: 'Not logged in' };
+
+    try {
+      const response = await fetch('/api/challenges', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          challengeId,
+          action: 'cancel',
+          userId: currentUser.id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        await loadChallenges();
+        return { success: true };
+      }
+
+      return { success: false, error: data.error };
+    } catch (error) {
+      console.error('Failed to cancel challenge:', error);
+      return { success: false, error: 'Failed to cancel challenge' };
+    }
+  },
+
+  getActiveChallengesCount: () => {
+    const { challenges, currentUser } = get();
+    if (!currentUser) return 0;
+
+    return challenges.filter(
+      (c) =>
+        (c.status === 'pending' || c.status === 'active') &&
+        (c.challengerId === currentUser.id || c.opponentId === currentUser.id)
+    ).length;
+  },
+
+  canCreateChallenge: (type: ChallengeType) => {
+    const { currentUser, getActiveChallengesCount } = get();
+    if (!currentUser) {
+      return { canCreate: false, reason: 'Not logged in' };
+    }
+
+    const activeCount = getActiveChallengesCount();
+    if (activeCount >= MAX_ACTIVE_CHALLENGES) {
+      return {
+        canCreate: false,
+        reason: `Maximum ${MAX_ACTIVE_CHALLENGES} active challenges allowed`,
+      };
+    }
+
+    const requiredXp = type === 'sp500' ? CHALLENGE_XP.VS_SP500 : CHALLENGE_XP.VS_USER;
+    if (currentUser.xp < requiredXp) {
+      return {
+        canCreate: false,
+        reason: `Need ${requiredXp} XP to cover potential loss`,
+      };
+    }
+
+    return { canCreate: true };
+  },
+
+  // Data loading
+  loadData: async () => {
+    const sessionUserId = getStoredSession();
+
+    if (!sessionUserId) {
+      set({ isLoading: false, isAuthenticated: false });
+      return;
+    }
+
+    try {
+      // Fetch user data
+      const userRes = await fetch(`/api/users?id=${sessionUserId}`);
+      const userData = await userRes.json();
+
+      if (!userData.success) {
+        setStoredSession(null);
+        set({ isLoading: false, isAuthenticated: false });
+        return;
+      }
+
+      // Fetch user's portfolios
+      const portfolioRes = await fetch(`/api/portfolios?userId=${sessionUserId}`);
+      const portfolioData = await portfolioRes.json();
+
+      // Fetch public portfolios
+      const publicRes = await fetch('/api/portfolios');
+      const publicData = await publicRes.json();
+
+      // Fetch challenges
+      const challengesRes = await fetch(`/api/challenges?userId=${sessionUserId}`);
+      const challengesData = await challengesRes.json();
+
+      set({
+        currentUser: userData.user,
+        isAuthenticated: true,
+        isLoading: false,
+        portfolios: portfolioData.success ? portfolioData.portfolios : [],
+        publicPortfolios: publicData.success ? publicData.portfolios : [],
+        challenges: challengesData.success ? challengesData.challenges : [],
+        pendingChallenges: challengesData.success ? challengesData.pendingInvites : [],
+        activeChallenges: challengesData.success ? challengesData.activeChallenges : [],
+        completedChallenges: challengesData.success ? challengesData.completedChallenges : [],
+      });
+    } catch (error) {
+      console.error('Failed to load data:', error);
+      setStoredSession(null);
+      set({ isLoading: false, isAuthenticated: false });
+    }
+  },
+
+  refreshPortfolios: async () => {
     const { currentUser } = get();
-    set({
-      portfolios: currentUser ? portfolioStorage.getByUserId(currentUser.id) : [],
-      publicPortfolios: portfolioStorage.getPublic(),
-    });
+    if (!currentUser) return;
+
+    try {
+      const portfolioRes = await fetch(`/api/portfolios?userId=${currentUser.id}`);
+      const portfolioData = await portfolioRes.json();
+
+      const publicRes = await fetch('/api/portfolios');
+      const publicData = await publicRes.json();
+
+      set({
+        portfolios: portfolioData.success ? portfolioData.portfolios : [],
+        publicPortfolios: publicData.success ? publicData.portfolios : [],
+      });
+    } catch (error) {
+      console.error('Failed to refresh portfolios:', error);
+    }
   },
 }));
