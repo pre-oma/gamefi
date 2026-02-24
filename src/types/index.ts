@@ -1,3 +1,7 @@
+// Team/Portfolio Limits
+export const DEFAULT_MAX_TEAMS = 3;
+export const TEAM_SLOT_UNLOCK_COST = 1000; // XP cost to unlock additional team slot
+
 // User Types
 export interface User {
   id: string;
@@ -14,6 +18,7 @@ export interface User {
   badges: Badge[];
   level: number;
   xp: number;
+  maxTeams: number; // Maximum number of teams user can create (default: 3)
 }
 
 export interface Badge {

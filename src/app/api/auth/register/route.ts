@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { hashPassword, validatePassword, validateEmail, validateUsername } from '@/lib/auth';
-import { User, UserCredentials, AuthResponse } from '@/types';
+import { User, UserCredentials, AuthResponse, DEFAULT_MAX_TEAMS } from '@/types';
 
 interface RegisterRequestBody {
   username: string;
@@ -63,6 +63,7 @@ export async function POST(request: NextRequest) {
       badges: [],
       level: 1,
       xp: 0,
+      maxTeams: DEFAULT_MAX_TEAMS,
     };
 
     // Create credentials object

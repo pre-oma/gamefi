@@ -12,6 +12,8 @@ import {
   Badge,
   Asset,
   FORMATIONS,
+  DEFAULT_MAX_TEAMS,
+  TEAM_SLOT_UNLOCK_COST,
 } from '@/types';
 import { userStorage, portfolioStorage, activityStorage, notificationStorage, credentialStorage } from '@/lib/storage';
 import { AuthResponse, UserCredentials } from '@/types';
@@ -41,6 +43,9 @@ interface AppState {
   assignAssetToPosition: (portfolioId: string, positionId: string, asset: Asset | null) => void;
   likePortfolio: (portfolioId: string) => void;
   clonePortfolio: (portfolioId: string) => Portfolio | null;
+  canCreateTeam: () => boolean;
+  getTeamSlotInfo: () => { current: number; max: number; canUnlock: boolean; unlockCost: number };
+  unlockTeamSlot: () => boolean;
 
   // Actions - Social
   followUser: (targetUserId: string) => void;
@@ -195,9 +200,55 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   // Portfolio actions
-  createPortfolio: (name: string, description: string, formation: Formation) => {
+  canCreateTeam: () => {
     const { currentUser } = get();
+    if (!currentUser) return false;
+    const maxTeams = currentUser.maxTeams ?? DEFAULT_MAX_TEAMS;
+    return currentUser.portfolios.length < maxTeams;
+  },
+
+  getTeamSlotInfo: () => {
+    const { currentUser } = get();
+    if (!currentUser) {
+      return { current: 0, max: DEFAULT_MAX_TEAMS, canUnlock: false, unlockCost: TEAM_SLOT_UNLOCK_COST };
+    }
+    const maxTeams = currentUser.maxTeams ?? DEFAULT_MAX_TEAMS;
+    const canUnlock = currentUser.xp >= TEAM_SLOT_UNLOCK_COST;
+    return {
+      current: currentUser.portfolios.length,
+      max: maxTeams,
+      canUnlock,
+      unlockCost: TEAM_SLOT_UNLOCK_COST,
+    };
+  },
+
+  unlockTeamSlot: () => {
+    const { currentUser } = get();
+    if (!currentUser) return false;
+    if (currentUser.xp < TEAM_SLOT_UNLOCK_COST) return false;
+
+    const currentMaxTeams = currentUser.maxTeams ?? DEFAULT_MAX_TEAMS;
+    const updatedUser = {
+      ...currentUser,
+      xp: currentUser.xp - TEAM_SLOT_UNLOCK_COST,
+      maxTeams: currentMaxTeams + 1,
+    };
+
+    userStorage.saveUser(updatedUser);
+    userStorage.setCurrentUser(updatedUser);
+    set({ currentUser: updatedUser });
+
+    return true;
+  },
+
+  createPortfolio: (name: string, description: string, formation: Formation) => {
+    const { currentUser, canCreateTeam } = get();
     if (!currentUser) throw new Error('Must be logged in');
+
+    // Check team limit
+    if (!canCreateTeam()) {
+      throw new Error('Team limit reached. Unlock more slots with XP.');
+    }
 
     const positions = FORMATIONS[formation];
     const players: PortfolioPlayer[] = positions.map((pos) => ({

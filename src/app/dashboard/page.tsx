@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useStore } from '@/store/useStore';
 import { Header, Button, PortfolioCard, Modal, Input } from '@/components';
-import { Formation, FORMATIONS, PortfolioPerformance } from '@/types';
+import { Formation, FORMATIONS, PortfolioPerformance, TEAM_SLOT_UNLOCK_COST } from '@/types';
 import {
   cn,
   formatCurrency,
@@ -19,7 +19,7 @@ import { fetchMultiplePortfolioPerformances } from '@/hooks/usePortfolioRealPerf
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { currentUser, isAuthenticated, isLoading, loadData, portfolios, createPortfolio } = useStore();
+  const { currentUser, isAuthenticated, isLoading, loadData, portfolios, createPortfolio, canCreateTeam, getTeamSlotInfo, unlockTeamSlot } = useStore();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPortfolioName, setNewPortfolioName] = useState('');
   const [newPortfolioDesc, setNewPortfolioDesc] = useState('');
@@ -130,12 +130,17 @@ export default function DashboardPage() {
 
   const handleCreatePortfolio = () => {
     if (!newPortfolioName.trim()) return;
+    if (!canCreateTeam()) return;
 
-    const portfolio = createPortfolio(newPortfolioName, newPortfolioDesc, selectedFormation);
-    setShowCreateModal(false);
-    setNewPortfolioName('');
-    setNewPortfolioDesc('');
-    router.push(`/portfolio/${portfolio.id}`);
+    try {
+      const portfolio = createPortfolio(newPortfolioName, newPortfolioDesc, selectedFormation);
+      setShowCreateModal(false);
+      setNewPortfolioName('');
+      setNewPortfolioDesc('');
+      router.push(`/portfolio/${portfolio.id}`);
+    } catch (error) {
+      console.error('Failed to create portfolio:', error);
+    }
   };
 
   if (isLoading || !isAuthenticated) {
@@ -251,13 +256,42 @@ export default function DashboardPage() {
           {/* My Portfolios */}
           <div className="lg:col-span-2">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-white">My Teams</h2>
-              <Button onClick={() => setShowCreateModal(true)} size="sm">
-                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Create Team
-              </Button>
+              <div>
+                <h2 className="text-xl font-semibold text-white">My Teams</h2>
+                <p className="text-sm text-slate-400">
+                  {getTeamSlotInfo().current} / {getTeamSlotInfo().max} slots used
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {!canCreateTeam() && (
+                  <Button
+                    onClick={() => {
+                      if (unlockTeamSlot()) {
+                        // Successfully unlocked
+                      }
+                    }}
+                    size="sm"
+                    variant="outline"
+                    disabled={!getTeamSlotInfo().canUnlock}
+                    title={getTeamSlotInfo().canUnlock ? `Spend ${TEAM_SLOT_UNLOCK_COST} XP to unlock` : `Need ${TEAM_SLOT_UNLOCK_COST} XP to unlock`}
+                  >
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    Unlock Slot ({TEAM_SLOT_UNLOCK_COST} XP)
+                  </Button>
+                )}
+                <Button
+                  onClick={() => setShowCreateModal(true)}
+                  size="sm"
+                  disabled={!canCreateTeam()}
+                >
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Create Team
+                </Button>
+              </div>
             </div>
 
             {portfolios.length === 0 ? (
@@ -273,7 +307,7 @@ export default function DashboardPage() {
                 </div>
                 <h3 className="text-lg font-semibold text-white mb-2">No teams yet</h3>
                 <p className="text-slate-400 mb-6">Create your first investment team to start tracking performance.</p>
-                <Button onClick={() => setShowCreateModal(true)}>Create Your First Team</Button>
+                <Button onClick={() => setShowCreateModal(true)} disabled={!canCreateTeam()}>Create Your First Team</Button>
               </motion.div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -413,7 +447,7 @@ export default function DashboardPage() {
             <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
               Cancel
             </Button>
-            <Button onClick={handleCreatePortfolio} className="flex-1" disabled={!newPortfolioName.trim()}>
+            <Button onClick={handleCreatePortfolio} className="flex-1" disabled={!newPortfolioName.trim() || !canCreateTeam()}>
               Create Team
             </Button>
           </div>
