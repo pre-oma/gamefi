@@ -24,13 +24,18 @@ interface FormationFieldProps {
   compact?: boolean;
 }
 
-const getPositionCoords = (position: Position, formation: Formation): { x: number; y: number } => {
-  const positions = FORMATIONS[formation];
-  const rowCounts = [0, 0, 0, 0]; // Count positions in each row
+// Default allocation per player (100% / 11 players)
+const DEFAULT_ALLOCATION = 100 / 11;
 
-  positions.forEach((p) => {
-    rowCounts[p.row]++;
-  });
+// Maximum vertical offset based on weight (as percentage of field height)
+const MAX_WEIGHT_OFFSET = 8;
+
+const getPositionCoords = (
+  position: Position,
+  formation: Formation,
+  allocation: number = DEFAULT_ALLOCATION
+): { x: number; y: number } => {
+  const positions = FORMATIONS[formation];
 
   // Calculate row positions (bottom to top)
   const rowYPositions = [85, 65, 40, 15]; // GK, DEF, MID, ATK
@@ -44,7 +49,17 @@ const getPositionCoords = (position: Position, formation: Formation): { x: numbe
   const spacing = 80 / (totalInRow + 1);
   const x = 10 + spacing * (positionIndex + 1);
 
-  return { x, y: rowYPositions[position.row] };
+  // Calculate Y offset based on weight deviation from average
+  // Higher weight = negative offset (moves UP on field)
+  const weightDeviation = allocation - DEFAULT_ALLOCATION;
+  const normalizedDeviation = weightDeviation / DEFAULT_ALLOCATION; // -1 to ~10 range
+  const yOffset = -normalizedDeviation * MAX_WEIGHT_OFFSET; // Clamped offset
+
+  // Clamp offset to prevent overlapping with other rows
+  const clampedOffset = Math.max(-MAX_WEIGHT_OFFSET, Math.min(MAX_WEIGHT_OFFSET, yOffset));
+  const y = rowYPositions[position.row] + clampedOffset;
+
+  return { x, y };
 };
 
 const PlayerSlot: React.FC<{
@@ -55,10 +70,13 @@ const PlayerSlot: React.FC<{
   isEditable?: boolean;
   compact?: boolean;
 }> = ({ player, position, formation, onClick, isEditable, compact }) => {
-  const { x, y } = getPositionCoords(position, formation);
+  const allocation = player.allocation || DEFAULT_ALLOCATION;
+  const { x, y } = getPositionCoords(position, formation, allocation);
   const hasAsset = player.asset !== null;
   const riskLevel = POSITION_RISK_MAP[position.row];
   const riskColor = RISK_COLORS[riskLevel];
+  const isHighWeight = allocation > DEFAULT_ALLOCATION + 2;
+  const isLowWeight = allocation < DEFAULT_ALLOCATION - 2;
 
   return (
     <motion.button
@@ -73,8 +91,8 @@ const PlayerSlot: React.FC<{
       )}
       style={{ left: `${x}%`, top: `${y}%` }}
     >
-      {/* Risk Level Badge */}
-      {!compact && (
+      {/* Risk Level Badge - only show if no asset */}
+      {!compact && !hasAsset && (
         <div
           className={cn(
             'absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap z-10',
@@ -143,6 +161,18 @@ const PlayerSlot: React.FC<{
         )}
       </div>
 
+      {/* Weight Badge */}
+      {hasAsset && !compact && (
+        <div
+          className={cn(
+            'absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap',
+            isHighWeight ? 'bg-emerald-500 text-white' : isLowWeight ? 'bg-slate-600 text-slate-300' : 'bg-slate-700 text-slate-300'
+          )}
+        >
+          {allocation.toFixed(1)}%
+        </div>
+      )}
+
       {/* Hover Card */}
       {hasAsset && !compact && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none z-10">
@@ -150,6 +180,15 @@ const PlayerSlot: React.FC<{
             <p className="font-medium text-white text-sm">{player.asset!.name}</p>
             <p className="text-slate-400 text-xs">{player.asset!.sector}</p>
             <div className="mt-2 flex justify-between text-xs">
+              <span className="text-slate-400">Weight:</span>
+              <span className={cn(
+                'font-semibold',
+                isHighWeight ? 'text-emerald-400' : isLowWeight ? 'text-slate-400' : 'text-white'
+              )}>
+                {allocation.toFixed(1)}%
+              </span>
+            </div>
+            <div className="flex justify-between text-xs">
               <span className="text-slate-400">Price:</span>
               <span className="text-white">{formatCurrency(player.asset!.currentPrice)}</span>
             </div>

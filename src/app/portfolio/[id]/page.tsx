@@ -50,15 +50,17 @@ export default function PortfolioDetailPage() {
   const params = useParams();
   const portfolioId = params.id as string;
 
-  const { currentUser, isAuthenticated, loadData, assignAssetToPosition, likePortfolio, clonePortfolio, deletePortfolio } = useStore();
+  const { currentUser, isAuthenticated, loadData, assignAssetToPosition, updatePlayerWeights, likePortfolio, clonePortfolio, deletePortfolio } = useStore();
 
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [selectedPosition, setSelectedPosition] = useState<{ player: PortfolioPlayer; position: Position } | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showWeightsModal, setShowWeightsModal] = useState(false);
   const [copied, setCopied] = useState(false);
   const [dateRangeStart, setDateRangeStart] = useState<Date | null>(null);
   const [dateRangeEnd, setDateRangeEnd] = useState<Date | null>(null);
+  const [editingWeights, setEditingWeights] = useState<{ [positionId: string]: number }>({});
 
   const [owner, setOwner] = useState<any>(null);
 
@@ -273,6 +275,23 @@ export default function PortfolioDetailPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                   </svg>
                   Clone
+                </Button>
+              )}
+
+              {isOwner && filledPositions > 0 && (
+                <Button variant="outline" onClick={() => {
+                  // Initialize editing weights from current portfolio
+                  const weights: { [positionId: string]: number } = {};
+                  portfolio.players.forEach(p => {
+                    weights[p.positionId] = p.allocation || (100 / 11);
+                  });
+                  setEditingWeights(weights);
+                  setShowWeightsModal(true);
+                }}>
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                  </svg>
+                  Weights
                 </Button>
               )}
 
@@ -726,6 +745,135 @@ export default function PortfolioDetailPage() {
             </Button>
             <Button variant="danger" onClick={handleDelete} className="flex-1">
               Delete
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Weights Editor Modal */}
+      <Modal isOpen={showWeightsModal} onClose={() => setShowWeightsModal(false)} title="Edit Portfolio Weights" size="md">
+        <div className="space-y-6">
+          <p className="text-slate-400 text-sm">
+            Adjust the weight of each stock. Higher weights make stocks more prominent on the field (move UP).
+            Total must equal 100%.
+          </p>
+
+          {/* Total indicator */}
+          <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+            <span className="text-slate-300">Total Weight:</span>
+            <span className={cn(
+              'font-bold text-lg',
+              Math.abs(Object.values(editingWeights).reduce((sum, w) => sum + w, 0) - 100) < 0.1
+                ? 'text-emerald-400'
+                : 'text-red-400'
+            )}>
+              {Object.values(editingWeights).reduce((sum, w) => sum + w, 0).toFixed(1)}%
+            </span>
+          </div>
+
+          {/* Weight inputs for each assigned stock */}
+          <div className="space-y-3 max-h-80 overflow-y-auto">
+            {portfolio.players
+              .filter(p => p.asset)
+              .sort((a, b) => (editingWeights[b.positionId] || 0) - (editingWeights[a.positionId] || 0))
+              .map(player => (
+                <div key={player.positionId} className="flex items-center gap-4 p-3 bg-slate-800/30 rounded-lg">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-white">{player.asset!.symbol}</span>
+                      <span className="text-xs text-slate-500 truncate">{player.asset!.name}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setEditingWeights(prev => ({
+                        ...prev,
+                        [player.positionId]: Math.max(0, (prev[player.positionId] || 0) - 1)
+                      }))}
+                      className="w-8 h-8 flex items-center justify-center bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={editingWeights[player.positionId]?.toFixed(1) || '0'}
+                      onChange={(e) => setEditingWeights(prev => ({
+                        ...prev,
+                        [player.positionId]: Math.max(0, Math.min(100, parseFloat(e.target.value) || 0))
+                      }))}
+                      className="w-20 bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-center text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <span className="text-slate-400 text-sm">%</span>
+                    <button
+                      onClick={() => setEditingWeights(prev => ({
+                        ...prev,
+                        [player.positionId]: Math.min(100, (prev[player.positionId] || 0) + 1)
+                      }))}
+                      className="w-8 h-8 flex items-center justify-center bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              ))}
+          </div>
+
+          {/* Auto-balance button */}
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => {
+              const filledPlayers = portfolio.players.filter(p => p.asset);
+              const equalWeight = 100 / filledPlayers.length;
+              const newWeights: { [positionId: string]: number } = {};
+              filledPlayers.forEach(p => {
+                newWeights[p.positionId] = equalWeight;
+              });
+              // Keep empty slots at 0
+              portfolio.players.filter(p => !p.asset).forEach(p => {
+                newWeights[p.positionId] = 0;
+              });
+              setEditingWeights(newWeights);
+            }}
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Auto-Balance (Equal Weights)
+          </Button>
+
+          {/* Save/Cancel buttons */}
+          <div className="flex gap-3 pt-2">
+            <Button variant="outline" onClick={() => setShowWeightsModal(false)} className="flex-1">
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                const total = Object.values(editingWeights).reduce((sum, w) => sum + w, 0);
+                if (Math.abs(total - 100) > 0.1) {
+                  alert('Total weight must equal 100%');
+                  return;
+                }
+                const weights = Object.entries(editingWeights).map(([positionId, allocation]) => ({
+                  positionId,
+                  allocation
+                }));
+                await updatePlayerWeights(portfolio.id, weights);
+                // Refresh portfolio data
+                const res = await fetch(`/api/portfolios?id=${portfolioId}`);
+                const data = await res.json();
+                if (data.success && data.portfolios?.length > 0) {
+                  setPortfolio(data.portfolios[0]);
+                }
+                setShowWeightsModal(false);
+              }}
+              className="flex-1"
+              disabled={Math.abs(Object.values(editingWeights).reduce((sum, w) => sum + w, 0) - 100) > 0.1}
+            >
+              Save Weights
             </Button>
           </div>
         </div>

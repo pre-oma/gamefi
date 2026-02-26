@@ -68,6 +68,7 @@ interface AppState {
   updatePortfolio: (id: string, updates: Partial<Portfolio>) => Promise<void>;
   deletePortfolio: (id: string) => Promise<void>;
   assignAssetToPosition: (portfolioId: string, positionId: string, asset: Asset | null) => Promise<void>;
+  updatePlayerWeights: (portfolioId: string, weights: { positionId: string; allocation: number }[]) => Promise<void>;
   likePortfolio: (portfolioId: string) => void;
   clonePortfolio: (portfolioId: string) => Promise<Portfolio | null>;
   canCreateTeam: () => boolean;
@@ -370,6 +371,25 @@ export const useStore = create<AppState>((set, get) => ({
     const updatedPlayers = portfolio.players.map((player) =>
       player.positionId === positionId ? { ...player, asset } : player
     );
+
+    await get().updatePortfolio(portfolioId, { players: updatedPlayers });
+  },
+
+  updatePlayerWeights: async (portfolioId: string, weights: { positionId: string; allocation: number }[]) => {
+    const portfolio = get().portfolios.find((p) => p.id === portfolioId);
+    if (!portfolio) return;
+
+    // Validate total is 100%
+    const total = weights.reduce((sum, w) => sum + w.allocation, 0);
+    if (Math.abs(total - 100) > 0.1) {
+      console.error('Weights must sum to 100%');
+      return;
+    }
+
+    const updatedPlayers = portfolio.players.map((player) => {
+      const weightUpdate = weights.find((w) => w.positionId === player.positionId);
+      return weightUpdate ? { ...player, allocation: weightUpdate.allocation } : player;
+    });
 
     await get().updatePortfolio(portfolioId, { players: updatedPlayers });
   },
