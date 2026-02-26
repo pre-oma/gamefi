@@ -1,20 +1,29 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-
-// Create client only if credentials are available
+// Lazy initialization - client is created on first use, not at build time
 let supabaseClient: SupabaseClient | null = null;
 
-if (supabaseUrl && supabaseAnonKey) {
-  supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+function getSupabaseClient(): SupabaseClient | null {
+  if (supabaseClient) {
+    return supabaseClient;
+  }
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+  if (supabaseUrl && supabaseAnonKey) {
+    supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+    return supabaseClient;
+  }
+
+  return null;
 }
 
 // Create a chainable mock for when Supabase is not configured
 const createChainableMock = () => {
   const mock: any = {
     data: null,
-    error: new Error('Supabase not configured'),
+    error: new Error('Supabase not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.'),
   };
 
   const chainable = () => mock;
@@ -31,16 +40,18 @@ const createChainableMock = () => {
   return mock;
 };
 
-// Export a proxy that throws helpful errors if Supabase is not configured
+// Export a proxy that lazily creates the client when first accessed
 export const supabase = new Proxy({} as SupabaseClient, {
   get(target, prop) {
-    if (!supabaseClient) {
+    const client = getSupabaseClient();
+    if (!client) {
       if (prop === 'from') {
         return () => createChainableMock();
       }
-      throw new Error('Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.');
+      console.error('Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.');
+      throw new Error('Supabase is not configured');
     }
-    return (supabaseClient as any)[prop];
+    return (client as any)[prop];
   },
 });
 
