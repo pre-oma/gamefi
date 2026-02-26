@@ -30,14 +30,24 @@ export async function POST(request: NextRequest) {
 
     const normalizedIdentifier = identifier.toLowerCase().trim();
 
-    // Find user by username or email
-    const { data: dbUser, error: userError } = await supabase
+    // Find user by username first
+    let { data: dbUser } = await supabase
       .from('users')
       .select('*')
-      .or(`username.eq.${normalizedIdentifier},email.eq.${normalizedIdentifier}`)
-      .single();
+      .eq('username', normalizedIdentifier)
+      .maybeSingle();
 
-    if (userError || !dbUser) {
+    // If not found by username, try email
+    if (!dbUser) {
+      const { data: userByEmail } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', normalizedIdentifier)
+        .maybeSingle();
+      dbUser = userByEmail;
+    }
+
+    if (!dbUser) {
       return NextResponse.json<AuthResponse>(
         { success: false, error: 'Invalid username/email or password' },
         { status: 401 }
@@ -45,13 +55,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Get credentials
-    const { data: credentials, error: credError } = await supabase
+    const { data: credentials } = await supabase
       .from('user_credentials')
       .select('*')
       .eq('user_id', dbUser.id)
-      .single();
+      .maybeSingle();
 
-    if (credError || !credentials) {
+    if (!credentials) {
       return NextResponse.json<AuthResponse>(
         { success: false, error: 'Invalid username/email or password' },
         { status: 401 }
