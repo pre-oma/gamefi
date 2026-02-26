@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
         joined_at: now,
         total_rewards: 0,
         level: 1,
-        xp: 0,
+        xp: 500,
         max_teams: DEFAULT_MAX_TEAMS,
       })
       .select()
