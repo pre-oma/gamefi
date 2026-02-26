@@ -2,10 +2,9 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useStore } from '@/store/useStore';
-import { Header, Button, PortfolioCard, Modal, Input } from '@/components';
+import { AppLayout, Button, PortfolioCard, Modal, Input } from '@/components';
 import { Formation, FORMATIONS, PortfolioPerformance, TEAM_SLOT_UNLOCK_COST } from '@/types';
 import {
   cn,
@@ -18,22 +17,11 @@ import {
 import { fetchMultiplePortfolioPerformances } from '@/hooks/usePortfolioRealPerformance';
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const { currentUser, isAuthenticated, isLoading, loadData, portfolios, createPortfolio, canCreateTeam, getTeamSlotInfo, unlockTeamSlot } = useStore();
+  const { currentUser, portfolios, createPortfolio, canCreateTeam, getTeamSlotInfo, unlockTeamSlot } = useStore();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPortfolioName, setNewPortfolioName] = useState('');
   const [newPortfolioDesc, setNewPortfolioDesc] = useState('');
   const [selectedFormation, setSelectedFormation] = useState<Formation>('4-3-3');
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push('/');
-    }
-  }, [isAuthenticated, isLoading, router]);
 
   // State for real portfolio performances
   const [realPerformances, setRealPerformances] = useState<Map<string, { performance: PortfolioPerformance; isRealData: boolean }>>(new Map());
@@ -137,25 +125,14 @@ export default function DashboardPage() {
       setShowCreateModal(false);
       setNewPortfolioName('');
       setNewPortfolioDesc('');
-      router.push(`/portfolio/${portfolio.id}`);
+      window.location.href = `/portfolio/${portfolio.id}`;
     } catch (error) {
       console.error('Failed to create portfolio:', error);
     }
   };
 
-  if (isLoading || !isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="w-16 h-16 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-slate-950">
-      <Header />
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12">
+    <AppLayout>
         {/* Welcome Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -402,7 +379,6 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
-      </main>
 
       {/* Create Portfolio Modal */}
       <Modal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} title="Create New Team" size="md">
@@ -451,6 +427,6 @@ export default function DashboardPage() {
           </div>
         </div>
       </Modal>
-    </div>
+    </AppLayout>
   );
 }

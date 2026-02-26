@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useStore } from '@/store/useStore';
 import { portfolioStorage, userStorage } from '@/lib/storage';
-import { Header } from '@/components';
+import { AppLayout } from '@/components';
 import {
   PortfolioSelector,
   MetricComparisonChart,
@@ -414,25 +414,8 @@ export default function ComparePage() {
 
   const canCompare = selectedPortfolios.length >= MIN_PORTFOLIOS;
 
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-slate-950">
-        <Header />
-        <div className="max-w-7xl mx-auto px-4 pt-24">
-          <div className="text-center py-20">
-            <h1 className="text-2xl font-bold text-white mb-4">Please Log In</h1>
-            <p className="text-slate-400">You need to be logged in to compare portfolios.</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-slate-950">
-      <Header />
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12">
+    <AppLayout>
         {/* Page Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -683,7 +666,6 @@ export default function ComparePage() {
             </p>
           </motion.div>
         )}
-      </main>
-    </div>
+    </AppLayout>
   );
 }

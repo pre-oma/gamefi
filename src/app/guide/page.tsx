@@ -3,7 +3,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { Header } from '@/components';
+import { AppLayout } from '@/components';
 
 interface GuideSection {
   id: string;
@@ -231,10 +231,7 @@ const sections: GuideSection[] = [
 
 export default function GuidePage() {
   return (
-    <div className="min-h-screen bg-slate-950">
-      <Header />
-
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12">
+    <AppLayout>
         {/* Page Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -312,7 +309,6 @@ export default function GuidePage() {
             Create Your First Portfolio
           </Link>
         </motion.div>
-      </main>
-    </div>
+    </AppLayout>
   );
 }

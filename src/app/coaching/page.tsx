@@ -1,39 +1,17 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useStore } from '@/store/useStore';
-import { Header } from '@/components';
+import { AppLayout } from '@/components';
 import { COACHING_MODULES, DIFFICULTY_COLORS, CoachingModule, CoachingLesson } from '@/data/coaching-content';
 import { cn } from '@/lib/utils';
 
 export default function CoachingArenaPage() {
-  const router = useRouter();
-  const { isAuthenticated, isLoading, loadData } = useStore();
   const [selectedModule, setSelectedModule] = useState<CoachingModule | null>(null);
   const [selectedLesson, setSelectedLesson] = useState<CoachingLesson | null>(null);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
   const [showQuizResults, setShowQuizResults] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push('/');
-    }
-  }, [isAuthenticated, isLoading, router]);
-
-  if (isLoading || !isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="w-16 h-16 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
-      </div>
-    );
-  }
 
   const handleBackToModules = () => {
     setSelectedModule(null);
@@ -130,10 +108,7 @@ export default function CoachingArenaPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950">
-      <Header />
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12">
+    <AppLayout>
         {/* Hero Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -545,7 +520,6 @@ export default function CoachingArenaPage() {
             </div>
           </motion.div>
         )}
-      </main>
-    </div>
+    </AppLayout>
   );
 }

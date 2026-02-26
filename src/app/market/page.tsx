@@ -1,34 +1,20 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { useStore } from '@/store/useStore';
-import { Header, Input } from '@/components';
+import { AppLayout, Input } from '@/components';
 import { MOCK_ASSETS, SECTORS, getAllAssets, addExternalAsset } from '@/data/assets';
 import { cn, formatCurrency, formatPercent, formatNumber } from '@/lib/utils';
 import { useAssetSearch } from '@/hooks/useAssetSearch';
 import { Asset } from '@/types';
 
 export default function MarketPage() {
-  const router = useRouter();
-  const { isAuthenticated, isLoading, loadData } = useStore();
   const [selectedSector, setSelectedSector] = useState('All');
   const [sortBy, setSortBy] = useState<'name' | 'price' | 'change' | 'marketCap'>('marketCap');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   // Use the async search hook for Yahoo Finance integration
   const { results: searchResults, isLoading: isSearching, error: searchError, searchTerm, setSearchTerm } = useAssetSearch('');
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push('/');
-    }
-  }, [isAuthenticated, isLoading, router]);
 
   const filteredAssets = useMemo(() => {
     // If searching, use search results (includes Yahoo Finance)
@@ -90,19 +76,8 @@ export default function MarketPage() {
     }
   };
 
-  if (isLoading || !isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="w-16 h-16 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-slate-950">
-      <Header />
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12">
+    <AppLayout>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">Market</h1>
           <p className="text-slate-400">Browse available assets to build your investment team.</p>
@@ -324,7 +299,6 @@ export default function MarketPage() {
             </div>
           )}
         </motion.div>
-      </main>
-    </div>
+    </AppLayout>
   );
 }

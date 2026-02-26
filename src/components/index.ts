@@ -3,6 +3,9 @@ export * from './ui';
 
 // Layout Components
 export { Header } from './layout/Header';
+export { Sidebar } from './layout/Sidebar';
+export { TopBar } from './layout/TopBar';
+export { AppLayout } from './layout/AppLayout';
 
 // Auth Components
 export { LoginForm } from './auth/LoginForm';

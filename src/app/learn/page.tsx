@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Header } from '@/components';
+import { AppLayout } from '@/components';
 import { LEARNING_SECTIONS, ASSET_TYPE_TOPICS, RISK_LEVEL_COLORS } from '@/data/learning-content';
 import { cn } from '@/lib/utils';
 
@@ -14,10 +14,7 @@ export default function LearnPage() {
   const currentSection = LEARNING_SECTIONS.find((s) => s.id === activeSection);
 
   return (
-    <div className="min-h-screen bg-slate-950">
-      <Header />
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12">
+    <AppLayout>
         {/* Hero Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -240,7 +237,6 @@ export default function LearnPage() {
             </Link>
           </div>
         </motion.div>
-      </main>
-    </div>
+    </AppLayout>
   );
 }

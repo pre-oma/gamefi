@@ -17,7 +17,7 @@ import {
 } from 'recharts';
 import { useStore } from '@/store/useStore';
 // Storage imports removed - now using API
-import { Header, Button, FormationField, AssetSelector, Modal, DateRangePicker } from '@/components';
+import { AppLayout, Button, FormationField, AssetSelector, Modal, DateRangePicker } from '@/components';
 import { Position, PortfolioPlayer, Portfolio } from '@/types';
 import {
   cn,
@@ -202,28 +202,22 @@ export default function PortfolioDetailPage() {
 
   if (!portfolio) {
     return (
-      <div className="min-h-screen bg-slate-950">
-        <Header />
-        <div className="max-w-7xl mx-auto px-4 pt-24">
-          <div className="text-center py-20">
-            <h1 className="text-2xl font-bold text-white mb-4">Portfolio Not Found</h1>
-            <p className="text-slate-400 mb-6">This portfolio doesn't exist or has been deleted.</p>
-            <Link href="/dashboard">
-              <Button>Back to Dashboard</Button>
-            </Link>
-          </div>
+      <AppLayout>
+        <div className="text-center py-20">
+          <h1 className="text-2xl font-bold text-white mb-4">Portfolio Not Found</h1>
+          <p className="text-slate-400 mb-6">This portfolio doesn't exist or has been deleted.</p>
+          <Link href="/dashboard">
+            <Button>Back to Dashboard</Button>
+          </Link>
         </div>
-      </div>
+      </AppLayout>
     );
   }
 
   const filledPositions = portfolio.players.filter((p) => p.asset !== null).length;
 
   return (
-    <div className="min-h-screen bg-slate-950">
-      <Header />
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12">
+    <AppLayout>
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -667,7 +661,6 @@ export default function PortfolioDetailPage() {
             )}
           </div>
         </motion.div>
-      </main>
 
       {/* Asset Selector Modal */}
       <AssetSelector
@@ -737,6 +730,6 @@ export default function PortfolioDetailPage() {
           </div>
         </div>
       </Modal>
-    </div>
+    </AppLayout>
   );
 }
