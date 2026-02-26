@@ -12,12 +12,17 @@ interface RegisterRequestBody {
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('Registration attempt started');
+
     const body: RegisterRequestBody = await request.json();
     const { username, email, password } = body;
+
+    console.log('Registering user:', username, email);
 
     // Validate inputs
     const usernameError = validateUsername(username);
     if (usernameError) {
+      console.log('Username validation failed:', usernameError);
       return NextResponse.json<AuthResponse>(
         { success: false, error: usernameError },
         { status: 400 }
@@ -26,6 +31,7 @@ export async function POST(request: NextRequest) {
 
     const emailError = validateEmail(email);
     if (emailError) {
+      console.log('Email validation failed:', emailError);
       return NextResponse.json<AuthResponse>(
         { success: false, error: emailError },
         { status: 400 }
@@ -34,6 +40,7 @@ export async function POST(request: NextRequest) {
 
     const passwordError = validatePassword(password);
     if (passwordError) {
+      console.log('Password validation failed:', passwordError);
       return NextResponse.json<AuthResponse>(
         { success: false, error: passwordError },
         { status: 400 }
@@ -41,13 +48,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if username already exists
-    const { data: existingUsername } = await supabase
+    console.log('Checking if username exists:', username.toLowerCase());
+    const { data: existingUsername, error: usernameCheckError } = await supabase
       .from('users')
       .select('id')
       .eq('username', username.toLowerCase())
       .maybeSingle();
 
+    if (usernameCheckError) {
+      console.error('Username check error:', usernameCheckError);
+      return NextResponse.json<AuthResponse>(
+        { success: false, error: 'Database error checking username: ' + usernameCheckError.message },
+        { status: 500 }
+      );
+    }
+
     if (existingUsername) {
+      console.log('Username already exists');
       return NextResponse.json<AuthResponse>(
         { success: false, error: 'Username already exists' },
         { status: 400 }
@@ -55,13 +72,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if email already exists
-    const { data: existingEmail } = await supabase
+    console.log('Checking if email exists:', email.toLowerCase());
+    const { data: existingEmail, error: emailCheckError } = await supabase
       .from('users')
       .select('id')
       .eq('email', email.toLowerCase())
       .maybeSingle();
 
+    if (emailCheckError) {
+      console.error('Email check error:', emailCheckError);
+      return NextResponse.json<AuthResponse>(
+        { success: false, error: 'Database error checking email: ' + emailCheckError.message },
+        { status: 500 }
+      );
+    }
+
     if (existingEmail) {
+      console.log('Email already exists');
       return NextResponse.json<AuthResponse>(
         { success: false, error: 'Email already exists' },
         { status: 400 }
@@ -69,11 +96,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Hash password
+    console.log('Hashing password');
     const { hash, salt } = await hashPassword(password);
 
     // Generate user ID
     const userId = uuidv4();
     const now = new Date().toISOString();
+
+    console.log('Inserting user with ID:', userId);
 
     // Insert user into database
     const { data: newUser, error: userError } = await supabase
@@ -97,10 +127,12 @@ export async function POST(request: NextRequest) {
     if (userError) {
       console.error('User insert error:', userError);
       return NextResponse.json<AuthResponse>(
-        { success: false, error: 'Failed to create user' },
+        { success: false, error: 'Failed to create user: ' + userError.message },
         { status: 500 }
       );
     }
+
+    console.log('User created successfully, inserting credentials');
 
     // Insert credentials
     const { error: credError } = await supabase
@@ -117,10 +149,12 @@ export async function POST(request: NextRequest) {
       // Rollback user creation
       await supabase.from('users').delete().eq('id', userId);
       return NextResponse.json<AuthResponse>(
-        { success: false, error: 'Failed to create user credentials' },
+        { success: false, error: 'Failed to create user credentials: ' + credError.message },
         { status: 500 }
       );
     }
+
+    console.log('Registration successful for user:', userId);
 
     // Convert database user to app user format
     const user = {
