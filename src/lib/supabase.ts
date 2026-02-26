@@ -11,11 +11,17 @@ function getSupabaseClient(): SupabaseClient | null {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
+  // Debug logging
+  console.log('Supabase URL exists:', !!supabaseUrl, 'Length:', supabaseUrl.length);
+  console.log('Supabase Key exists:', !!supabaseAnonKey, 'Length:', supabaseAnonKey.length);
+
   if (supabaseUrl && supabaseAnonKey) {
+    console.log('Creating Supabase client with URL:', supabaseUrl.substring(0, 30) + '...');
     supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
     return supabaseClient;
   }
 
+  console.error('Supabase credentials missing - URL:', supabaseUrl ? 'SET' : 'MISSING', 'Key:', supabaseAnonKey ? 'SET' : 'MISSING');
   return null;
 }
 
