@@ -165,6 +165,27 @@ CREATE TABLE IF NOT EXISTS user_statistics (
 CREATE INDEX IF NOT EXISTS idx_user_statistics_user_id ON user_statistics(user_id);
 
 -- ============================================
+-- 10. FEEDBACK TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS feedback (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    type VARCHAR(20) NOT NULL CHECK (type IN ('bug', 'feature', 'general')),
+    message TEXT NOT NULL,
+    email VARCHAR(255),
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    username VARCHAR(100),
+    url TEXT,
+    user_agent TEXT,
+    status VARCHAR(20) DEFAULT 'new' CHECK (status IN ('new', 'reviewed', 'resolved', 'wontfix')),
+    admin_notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    resolved_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status);
+CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at DESC);
+
+-- ============================================
 -- HELPER FUNCTIONS
 -- ============================================
 

@@ -6,6 +6,8 @@ import { AnimatePresence } from 'framer-motion';
 import { useStore } from '@/store/useStore';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
+import { BetaBanner } from '../BetaBanner';
+import { FeedbackWidget } from '../FeedbackWidget';
 import { cn } from '@/lib/utils';
 
 interface AppLayoutProps {
@@ -64,6 +66,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-slate-950">
+      {/* Beta Banner */}
+      <BetaBanner />
+
       {/* Sidebar */}
       <Sidebar
         isCollapsed={isCollapsed}
@@ -90,6 +95,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           {children}
         </div>
       </main>
+
+      {/* Feedback Widget */}
+      <FeedbackWidget />
     </div>
   );
 };

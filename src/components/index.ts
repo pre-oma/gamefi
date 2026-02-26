@@ -31,3 +31,5 @@ export { DailyReward } from './DailyReward';
 export { ThemeProvider, ThemeToggle, useTheme } from './ThemeProvider';
 export { ErrorBoundary, useErrorHandler } from './ErrorBoundary';
 export { Onboarding } from './Onboarding';
+export { FeedbackWidget } from './FeedbackWidget';
+export { BetaBanner } from './BetaBanner';
