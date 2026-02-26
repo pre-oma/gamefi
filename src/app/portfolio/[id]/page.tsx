@@ -799,7 +799,6 @@ export default function PortfolioDetailPage() {
           <div className="space-y-3 max-h-80 overflow-y-auto">
             {portfolio.players
               .filter(p => p.asset)
-              .sort((a, b) => (editingWeights[b.positionId] || 0) - (editingWeights[a.positionId] || 0))
               .map(player => (
                 <div key={player.positionId} className="flex items-center gap-4 p-3 bg-slate-800/30 rounded-lg">
                   <div className="flex-1 min-w-0">
