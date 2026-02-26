@@ -810,10 +810,16 @@ export default function PortfolioDetailPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setEditingWeights(prev => ({
-                        ...prev,
-                        [player.positionId]: Math.max(0, (prev[player.positionId] || 0) - 1)
-                      }))}
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const posId = player.positionId;
+                        setEditingWeights(prev => {
+                          const current = prev[posId] || 0;
+                          const newVal = Math.round(Math.max(0, current - 1) * 10) / 10;
+                          return { ...prev, [posId]: newVal };
+                        });
+                      }}
                       className="w-8 h-8 flex items-center justify-center bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
                     >
                       -
@@ -823,30 +829,32 @@ export default function PortfolioDetailPage() {
                       min="0"
                       max="100"
                       step="0.1"
-                      value={editingWeights[player.positionId] ?? 0}
+                      value={Math.round((editingWeights[player.positionId] ?? 0) * 10) / 10}
                       onChange={(e) => {
                         const val = e.target.value;
-                        // Allow empty string while typing
+                        const posId = player.positionId;
                         if (val === '') {
-                          setEditingWeights(prev => ({
-                            ...prev,
-                            [player.positionId]: 0
-                          }));
+                          setEditingWeights(prev => ({ ...prev, [posId]: 0 }));
                         } else {
-                          setEditingWeights(prev => ({
-                            ...prev,
-                            [player.positionId]: Math.max(0, Math.min(100, parseFloat(val) || 0))
-                          }));
+                          const parsed = parseFloat(val);
+                          const rounded = Math.round(Math.max(0, Math.min(100, parsed || 0)) * 10) / 10;
+                          setEditingWeights(prev => ({ ...prev, [posId]: rounded }));
                         }
                       }}
                       className="w-20 bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-center text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                     <span className="text-slate-400 text-sm">%</span>
                     <button
-                      onClick={() => setEditingWeights(prev => ({
-                        ...prev,
-                        [player.positionId]: Math.min(100, (prev[player.positionId] || 0) + 1)
-                      }))}
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const posId = player.positionId;
+                        setEditingWeights(prev => {
+                          const current = prev[posId] || 0;
+                          const newVal = Math.round(Math.min(100, current + 1) * 10) / 10;
+                          return { ...prev, [posId]: newVal };
+                        });
+                      }}
                       className="w-8 h-8 flex items-center justify-center bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
                     >
                       +
@@ -862,10 +870,17 @@ export default function PortfolioDetailPage() {
             className="w-full"
             onClick={() => {
               const filledPlayers = portfolio.players.filter(p => p.asset);
-              const equalWeight = 100 / filledPlayers.length;
+              const equalWeight = Math.round((100 / filledPlayers.length) * 10) / 10;
               const newWeights: { [positionId: string]: number } = {};
-              filledPlayers.forEach(p => {
-                newWeights[p.positionId] = equalWeight;
+              // Distribute equally, adjusting last one for rounding
+              filledPlayers.forEach((p, idx) => {
+                if (idx === filledPlayers.length - 1) {
+                  // Last player gets remainder to ensure exactly 100%
+                  const currentTotal = Object.values(newWeights).reduce((sum, w) => sum + w, 0);
+                  newWeights[p.positionId] = Math.round((100 - currentTotal) * 10) / 10;
+                } else {
+                  newWeights[p.positionId] = equalWeight;
+                }
               });
               // Keep empty slots at 0
               portfolio.players.filter(p => !p.asset).forEach(p => {
