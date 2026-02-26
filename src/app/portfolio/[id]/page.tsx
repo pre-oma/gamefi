@@ -527,14 +527,38 @@ export default function PortfolioDetailPage() {
             transition={{ delay: 0.2 }}
             className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6"
           >
-            <h2 className="text-lg font-semibold text-white mb-4">Team Formation</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-white">Team Formation</h2>
+              {isOwner && filledPositions > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const weights: { [positionId: string]: number } = {};
+                    portfolio.players.forEach(p => {
+                      weights[p.positionId] = p.allocation || (100 / 11);
+                    });
+                    setEditingWeights(weights);
+                    setShowWeightsModal(true);
+                  }}
+                >
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                  </svg>
+                  Adjust Weights
+                </Button>
+              )}
+            </div>
             <FormationField
               portfolio={portfolio}
               onPositionClick={handlePositionClick}
               isEditable={isOwner}
             />
             {isOwner && (
-              <p className="text-sm text-slate-500 text-center mt-4">Click on a position to assign an asset</p>
+              <p className="text-sm text-slate-500 text-center mt-4">
+                Click on a position to assign an asset
+                {filledPositions > 0 && ' | Use "Adjust Weights" to change allocations'}
+              </p>
             )}
           </motion.div>
 
