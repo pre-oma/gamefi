@@ -823,11 +823,22 @@ export default function PortfolioDetailPage() {
                       min="0"
                       max="100"
                       step="0.1"
-                      value={editingWeights[player.positionId]?.toFixed(1) || '0'}
-                      onChange={(e) => setEditingWeights(prev => ({
-                        ...prev,
-                        [player.positionId]: Math.max(0, Math.min(100, parseFloat(e.target.value) || 0))
-                      }))}
+                      value={editingWeights[player.positionId] ?? 0}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        // Allow empty string while typing
+                        if (val === '') {
+                          setEditingWeights(prev => ({
+                            ...prev,
+                            [player.positionId]: 0
+                          }));
+                        } else {
+                          setEditingWeights(prev => ({
+                            ...prev,
+                            [player.positionId]: Math.max(0, Math.min(100, parseFloat(val) || 0))
+                          }));
+                        }
+                      }}
                       className="w-20 bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-center text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                     <span className="text-slate-400 text-sm">%</span>
