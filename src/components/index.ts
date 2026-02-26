@@ -25,3 +25,9 @@ export * from './compare';
 
 // Challenge Components
 export * from './challenge';
+
+// New Feature Components
+export { DailyReward } from './DailyReward';
+export { ThemeProvider, ThemeToggle, useTheme } from './ThemeProvider';
+export { ErrorBoundary, useErrorHandler } from './ErrorBoundary';
+export { Onboarding } from './Onboarding';

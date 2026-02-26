@@ -459,3 +459,331 @@ export interface BenchmarkPerformance {
   historicalData: HistoricalDataPoint[];
   normalizedData: { date: string; value: number }[];
 }
+
+// ============================================
+// DAILY LOGIN REWARDS
+// ============================================
+export interface DailyReward {
+  id: string;
+  userId: string;
+  claimedAt: string;
+  xpAwarded: number;
+  streakDay: number; // Which day of the streak (1-7)
+  streakBonus: number; // Bonus XP for streak
+}
+
+export interface UserStreak {
+  id: string;
+  userId: string;
+  currentStreak: number;
+  longestStreak: number;
+  lastClaimDate: string | null;
+  totalDaysClaimed: number;
+}
+
+// Streak rewards: Day 1-6 = 10 XP, Day 7 = 50 XP bonus
+export const DAILY_LOGIN_REWARDS = {
+  BASE_XP: 10,
+  STREAK_7_BONUS: 50,
+  MAX_STREAK_DISPLAY: 7,
+};
+
+// ============================================
+// ACHIEVEMENT BADGES SYSTEM
+// ============================================
+export type BadgeCategory = 'portfolio' | 'social' | 'challenge' | 'learning' | 'streak' | 'special';
+export type BadgeRarity = 'common' | 'rare' | 'epic' | 'legendary';
+
+export interface AchievementBadge {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: BadgeCategory;
+  rarity: BadgeRarity;
+  xpReward: number;
+  requirement: {
+    type: string;
+    value: number;
+  };
+}
+
+export interface UserBadge {
+  id: string;
+  badgeId: string;
+  userId: string;
+  earnedAt: string;
+  badge?: AchievementBadge; // Joined data
+}
+
+export const ACHIEVEMENT_BADGES: AchievementBadge[] = [
+  // Portfolio Badges
+  { id: 'first_portfolio', name: 'Team Builder', description: 'Create your first portfolio', icon: '🏗️', category: 'portfolio', rarity: 'common', xpReward: 50, requirement: { type: 'portfolios_created', value: 1 } },
+  { id: 'five_portfolios', name: 'Portfolio Manager', description: 'Create 5 portfolios', icon: '📊', category: 'portfolio', rarity: 'rare', xpReward: 150, requirement: { type: 'portfolios_created', value: 5 } },
+  { id: 'full_team', name: 'Full Squad', description: 'Fill all 11 positions in a portfolio', icon: '⚽', category: 'portfolio', rarity: 'common', xpReward: 75, requirement: { type: 'full_portfolio', value: 1 } },
+  { id: 'diversified', name: 'Diversifier', description: 'Have 5+ different sectors in one portfolio', icon: '🌈', category: 'portfolio', rarity: 'rare', xpReward: 100, requirement: { type: 'sectors_count', value: 5 } },
+
+  // Challenge Badges
+  { id: 'first_win', name: 'First Victory', description: 'Win your first challenge', icon: '🏆', category: 'challenge', rarity: 'common', xpReward: 50, requirement: { type: 'challenges_won', value: 1 } },
+  { id: 'win_streak_3', name: 'Hot Streak', description: 'Win 3 challenges in a row', icon: '🔥', category: 'challenge', rarity: 'rare', xpReward: 200, requirement: { type: 'win_streak', value: 3 } },
+  { id: 'win_streak_5', name: 'Unstoppable', description: 'Win 5 challenges in a row', icon: '💪', category: 'challenge', rarity: 'epic', xpReward: 500, requirement: { type: 'win_streak', value: 5 } },
+  { id: 'beat_sp500', name: 'Market Beater', description: 'Beat S&P 500 in a challenge', icon: '📈', category: 'challenge', rarity: 'common', xpReward: 100, requirement: { type: 'beat_sp500', value: 1 } },
+  { id: 'ten_wins', name: 'Champion', description: 'Win 10 challenges', icon: '👑', category: 'challenge', rarity: 'epic', xpReward: 300, requirement: { type: 'challenges_won', value: 10 } },
+
+  // Social Badges
+  { id: 'first_follower', name: 'Influencer', description: 'Get your first follower', icon: '👥', category: 'social', rarity: 'common', xpReward: 25, requirement: { type: 'followers', value: 1 } },
+  { id: 'ten_followers', name: 'Rising Star', description: 'Reach 10 followers', icon: '⭐', category: 'social', rarity: 'rare', xpReward: 150, requirement: { type: 'followers', value: 10 } },
+  { id: 'portfolio_liked', name: 'Crowd Favorite', description: 'Get 10 likes on a portfolio', icon: '❤️', category: 'social', rarity: 'rare', xpReward: 100, requirement: { type: 'portfolio_likes', value: 10 } },
+  { id: 'portfolio_cloned', name: 'Trendsetter', description: 'Have your portfolio cloned 5 times', icon: '📋', category: 'social', rarity: 'epic', xpReward: 250, requirement: { type: 'portfolio_clones', value: 5 } },
+
+  // Streak Badges
+  { id: 'streak_7', name: 'Week Warrior', description: 'Maintain a 7-day login streak', icon: '📅', category: 'streak', rarity: 'common', xpReward: 100, requirement: { type: 'login_streak', value: 7 } },
+  { id: 'streak_30', name: 'Monthly Master', description: 'Maintain a 30-day login streak', icon: '🗓️', category: 'streak', rarity: 'epic', xpReward: 500, requirement: { type: 'login_streak', value: 30 } },
+  { id: 'streak_100', name: 'Centurion', description: 'Maintain a 100-day login streak', icon: '💯', category: 'streak', rarity: 'legendary', xpReward: 1500, requirement: { type: 'login_streak', value: 100 } },
+
+  // Learning Badges
+  { id: 'first_lesson', name: 'Student', description: 'Complete your first lesson', icon: '📚', category: 'learning', rarity: 'common', xpReward: 25, requirement: { type: 'lessons_completed', value: 1 } },
+  { id: 'all_lessons', name: 'Graduate', description: 'Complete all learning modules', icon: '🎓', category: 'learning', rarity: 'epic', xpReward: 500, requirement: { type: 'lessons_completed', value: 10 } },
+
+  // Special Badges
+  { id: 'early_adopter', name: 'Early Adopter', description: 'Joined during beta', icon: '🚀', category: 'special', rarity: 'legendary', xpReward: 500, requirement: { type: 'special', value: 1 } },
+  { id: 'referral_master', name: 'Recruiter', description: 'Refer 5 friends', icon: '🤝', category: 'special', rarity: 'epic', xpReward: 500, requirement: { type: 'referrals', value: 5 } },
+];
+
+// ============================================
+// REFERRAL SYSTEM
+// ============================================
+export interface Referral {
+  id: string;
+  referrerId: string; // User who shared the code
+  referredId: string; // User who used the code
+  referralCode: string;
+  status: 'pending' | 'completed';
+  xpAwarded: number;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface UserReferralInfo {
+  referralCode: string;
+  totalReferrals: number;
+  pendingReferrals: number;
+  totalXpEarned: number;
+}
+
+export const REFERRAL_REWARDS = {
+  REFERRER_XP: 100, // XP for the person who referred
+  REFERRED_XP: 50, // Bonus XP for the new user
+};
+
+// ============================================
+// PRICE ALERTS
+// ============================================
+export type AlertCondition = 'above' | 'below' | 'percent_change';
+
+export interface PriceAlert {
+  id: string;
+  userId: string;
+  symbol: string;
+  assetName: string;
+  condition: AlertCondition;
+  targetPrice: number | null; // For above/below
+  targetPercent: number | null; // For percent_change
+  currentPrice: number;
+  isActive: boolean;
+  isTriggered: boolean;
+  triggeredAt: string | null;
+  createdAt: string;
+}
+
+export const MAX_PRICE_ALERTS = 10;
+
+// ============================================
+// PORTFOLIO TEMPLATES
+// ============================================
+export type TemplateCategory = 'growth' | 'dividend' | 'balanced' | 'sector' | 'trending';
+
+export interface PortfolioTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: TemplateCategory;
+  formation: Formation;
+  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  expectedRisk: RiskLevel;
+  stocks: {
+    positionId: string;
+    symbol: string;
+    allocation: number;
+  }[];
+  tags: string[];
+  popularity: number; // Clone count
+}
+
+export const PORTFOLIO_TEMPLATES: PortfolioTemplate[] = [
+  {
+    id: 'tech_titans',
+    name: 'Tech Titans',
+    description: 'Top technology companies leading innovation',
+    category: 'growth',
+    formation: '4-3-3',
+    difficulty: 'beginner',
+    expectedRisk: 'high',
+    stocks: [
+      { positionId: 'gk', symbol: 'MSFT', allocation: 9.1 },
+      { positionId: 'lb', symbol: 'GOOGL', allocation: 9.1 },
+      { positionId: 'cb1', symbol: 'AAPL', allocation: 9.1 },
+      { positionId: 'cb2', symbol: 'AMZN', allocation: 9.1 },
+      { positionId: 'rb', symbol: 'META', allocation: 9.1 },
+      { positionId: 'lm', symbol: 'NVDA', allocation: 9.1 },
+      { positionId: 'cm', symbol: 'TSLA', allocation: 9.1 },
+      { positionId: 'rm', symbol: 'AMD', allocation: 9.1 },
+      { positionId: 'lw', symbol: 'CRM', allocation: 9.1 },
+      { positionId: 'st', symbol: 'NFLX', allocation: 9.1 },
+      { positionId: 'rw', symbol: 'ADBE', allocation: 9.0 },
+    ],
+    tags: ['technology', 'growth', 'large-cap'],
+    popularity: 0,
+  },
+  {
+    id: 'dividend_kings',
+    name: 'Dividend Kings',
+    description: 'Stable dividend-paying blue chip stocks',
+    category: 'dividend',
+    formation: '4-4-2',
+    difficulty: 'beginner',
+    expectedRisk: 'low',
+    stocks: [
+      { positionId: 'gk', symbol: 'JNJ', allocation: 9.1 },
+      { positionId: 'lb', symbol: 'PG', allocation: 9.1 },
+      { positionId: 'cb1', symbol: 'KO', allocation: 9.1 },
+      { positionId: 'cb2', symbol: 'PEP', allocation: 9.1 },
+      { positionId: 'rb', symbol: 'MMM', allocation: 9.1 },
+      { positionId: 'lm', symbol: 'XOM', allocation: 9.1 },
+      { positionId: 'lcm', symbol: 'CVX', allocation: 9.1 },
+      { positionId: 'rcm', symbol: 'VZ', allocation: 9.1 },
+      { positionId: 'rm', symbol: 'T', allocation: 9.1 },
+      { positionId: 'st1', symbol: 'IBM', allocation: 9.1 },
+      { positionId: 'st2', symbol: 'MCD', allocation: 9.0 },
+    ],
+    tags: ['dividend', 'income', 'stable'],
+    popularity: 0,
+  },
+  {
+    id: 'balanced_growth',
+    name: 'Balanced Growth',
+    description: 'Mix of growth and value stocks for stability',
+    category: 'balanced',
+    formation: '4-3-3',
+    difficulty: 'intermediate',
+    expectedRisk: 'medium',
+    stocks: [
+      { positionId: 'gk', symbol: 'BRK-B', allocation: 9.1 },
+      { positionId: 'lb', symbol: 'JPM', allocation: 9.1 },
+      { positionId: 'cb1', symbol: 'V', allocation: 9.1 },
+      { positionId: 'cb2', symbol: 'MA', allocation: 9.1 },
+      { positionId: 'rb', symbol: 'UNH', allocation: 9.1 },
+      { positionId: 'lm', symbol: 'HD', allocation: 9.1 },
+      { positionId: 'cm', symbol: 'DIS', allocation: 9.1 },
+      { positionId: 'rm', symbol: 'COST', allocation: 9.1 },
+      { positionId: 'lw', symbol: 'AAPL', allocation: 9.1 },
+      { positionId: 'st', symbol: 'MSFT', allocation: 9.1 },
+      { positionId: 'rw', symbol: 'GOOGL', allocation: 9.0 },
+    ],
+    tags: ['balanced', 'diversified', 'mixed'],
+    popularity: 0,
+  },
+  {
+    id: 'healthcare_heroes',
+    name: 'Healthcare Heroes',
+    description: 'Leading healthcare and pharmaceutical companies',
+    category: 'sector',
+    formation: '3-5-2',
+    difficulty: 'intermediate',
+    expectedRisk: 'medium',
+    stocks: [
+      { positionId: 'gk', symbol: 'JNJ', allocation: 9.1 },
+      { positionId: 'cb1', symbol: 'UNH', allocation: 9.1 },
+      { positionId: 'cb2', symbol: 'PFE', allocation: 9.1 },
+      { positionId: 'cb3', symbol: 'MRK', allocation: 9.1 },
+      { positionId: 'lwb', symbol: 'ABBV', allocation: 9.1 },
+      { positionId: 'lcm', symbol: 'LLY', allocation: 9.1 },
+      { positionId: 'cdm', symbol: 'TMO', allocation: 9.1 },
+      { positionId: 'rcm', symbol: 'ABT', allocation: 9.1 },
+      { positionId: 'rwb', symbol: 'DHR', allocation: 9.1 },
+      { positionId: 'st1', symbol: 'BMY', allocation: 9.1 },
+      { positionId: 'st2', symbol: 'AMGN', allocation: 9.0 },
+    ],
+    tags: ['healthcare', 'pharmaceutical', 'defensive'],
+    popularity: 0,
+  },
+  {
+    id: 'ai_revolution',
+    name: 'AI Revolution',
+    description: 'Companies leading the artificial intelligence boom',
+    category: 'trending',
+    formation: '4-3-3',
+    difficulty: 'advanced',
+    expectedRisk: 'high',
+    stocks: [
+      { positionId: 'gk', symbol: 'NVDA', allocation: 12 },
+      { positionId: 'lb', symbol: 'MSFT', allocation: 10 },
+      { positionId: 'cb1', symbol: 'GOOGL', allocation: 10 },
+      { positionId: 'cb2', symbol: 'META', allocation: 9 },
+      { positionId: 'rb', symbol: 'AMZN', allocation: 9 },
+      { positionId: 'lm', symbol: 'AMD', allocation: 9 },
+      { positionId: 'cm', symbol: 'PLTR', allocation: 8 },
+      { positionId: 'rm', symbol: 'CRM', allocation: 8 },
+      { positionId: 'lw', symbol: 'SNOW', allocation: 8 },
+      { positionId: 'st', symbol: 'AI', allocation: 9 },
+      { positionId: 'rw', symbol: 'PATH', allocation: 8 },
+    ],
+    tags: ['AI', 'technology', 'growth', 'trending'],
+    popularity: 0,
+  },
+];
+
+// ============================================
+// THEME SETTINGS
+// ============================================
+export type ThemeMode = 'dark' | 'light' | 'system';
+
+export interface UserPreferences {
+  theme: ThemeMode;
+  notifications: {
+    email: boolean;
+    push: boolean;
+    priceAlerts: boolean;
+    challengeUpdates: boolean;
+    socialUpdates: boolean;
+  };
+  displayCurrency: string;
+}
+
+// ============================================
+// ONBOARDING
+// ============================================
+export interface OnboardingStep {
+  id: string;
+  title: string;
+  description: string;
+  target: string; // CSS selector for highlighting
+  position: 'top' | 'bottom' | 'left' | 'right';
+}
+
+export interface UserOnboarding {
+  hasCompletedOnboarding: boolean;
+  currentStep: number;
+  skippedAt: string | null;
+  completedAt: string | null;
+}
+
+export const ONBOARDING_STEPS: OnboardingStep[] = [
+  { id: 'welcome', title: 'Welcome to Gamefi Invest!', description: 'Learn to invest by building your dream team of stocks.', target: '', position: 'bottom' },
+  { id: 'dashboard', title: 'Your Dashboard', description: 'Track your XP, level, and portfolio performance here.', target: '[data-tour="dashboard"]', position: 'bottom' },
+  { id: 'create_portfolio', title: 'Create Your First Team', description: 'Click here to build your first investment portfolio.', target: '[data-tour="create-portfolio"]', position: 'right' },
+  { id: 'formation', title: 'Choose a Formation', description: 'Different formations represent different investment strategies.', target: '[data-tour="formation"]', position: 'bottom' },
+  { id: 'add_stocks', title: 'Add Stocks to Your Team', description: 'Click on positions to add stocks. Match risk levels for best results!', target: '[data-tour="formation-field"]', position: 'left' },
+  { id: 'challenges', title: 'Challenge Others', description: 'Compete against the S&P 500 or other users to earn XP!', target: '[data-tour="challenges"]', position: 'right' },
+  { id: 'learn', title: 'Keep Learning', description: 'Visit the Learn section to improve your investing skills.', target: '[data-tour="learn"]', position: 'right' },
+];
