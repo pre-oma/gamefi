@@ -3,7 +3,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useStore } from '@/store/useStore';
-import { portfolioStorage, userStorage } from '@/lib/storage';
 import { AppLayout } from '@/components';
 import {
   PortfolioSelector,
@@ -80,20 +79,38 @@ export default function ComparePage() {
     fetchSpyForAlpha();
   }, [timeframe, customDateRange]);
 
+  // Helper to get portfolio by ID from store
+  const getPortfolioById = useCallback((id: string): Portfolio | null => {
+    return portfolios.find(p => p.id === id) || publicPortfolios.find(p => p.id === id) || null;
+  }, [portfolios, publicPortfolios]);
+
   // Load all users for displaying portfolio owners
   useEffect(() => {
-    const allPortfolios = [...portfolios, ...publicPortfolios];
-    const userIds = new Set(allPortfolios.map((p) => p.userId));
-    const userMap = new Map<string, User>();
+    const fetchUsers = async () => {
+      const allPortfolios = [...portfolios, ...publicPortfolios];
+      const userIds = new Set(allPortfolios.map((p) => p.userId));
+      const userMap = new Map<string, User>();
 
-    userIds.forEach((userId) => {
-      const user = userStorage.getUserById(userId);
-      if (user) {
-        userMap.set(userId, user);
-      }
-    });
+      await Promise.all(
+        Array.from(userIds).map(async (userId) => {
+          try {
+            const res = await fetch(`/api/users?id=${userId}`);
+            const data = await res.json();
+            if (data.success && data.user) {
+              userMap.set(userId, data.user);
+            }
+          } catch (error) {
+            console.error(`Failed to fetch user ${userId}:`, error);
+          }
+        })
+      );
 
-    setUsers(userMap);
+      setUsers(userMap);
+    };
+
+    if (portfolios.length > 0 || publicPortfolios.length > 0) {
+      fetchUsers();
+    }
   }, [portfolios, publicPortfolios]);
 
   // Fetch benchmark data when selected benchmarks, timeframe, or custom date range changes
@@ -154,7 +171,7 @@ export default function ComparePage() {
 
         await Promise.all(
           portfolioIds.map(async (id) => {
-            const portfolio = portfolioStorage.getById(id);
+            const portfolio = getPortfolioById(id);
             if (portfolio) {
               const historicalData = await calculatePortfolioHistoricalData(
                 portfolio,
@@ -189,7 +206,7 @@ export default function ComparePage() {
       // Collect all unique symbols from selected portfolios
       const allSymbols = new Set<string>();
       portfolioIds.forEach((id) => {
-        const portfolio = portfolioStorage.getById(id);
+        const portfolio = getPortfolioById(id);
         if (portfolio) {
           portfolio.players.forEach((player) => {
             if (player.asset?.symbol) {
@@ -223,14 +240,14 @@ export default function ComparePage() {
     return selectedIds
       .filter((id) => id !== '')
       .map((id) => {
-        const portfolio = portfolioStorage.getById(id);
+        const portfolio = getPortfolioById(id);
         if (!portfolio) return null;
         const performance = calculatePortfolioPerformance(portfolio);
-        const owner = userStorage.getUserById(portfolio.userId) || null;
+        const owner = users.get(portfolio.userId) || null;
         return { portfolio, performance, owner };
       })
       .filter((item): item is { portfolio: Portfolio; performance: PortfolioPerformance; owner: User | null } => item !== null);
-  }, [selectedIds]);
+  }, [selectedIds, getPortfolioById, users]);
 
   // Combine all benchmark performances for display (moved here for dependency ordering)
   const allBenchmarkPerformances = useMemo(() => {
