@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     const normalizedIdentifier = identifier.toLowerCase().trim();
 
     // Find user by username first
-    let { data: dbUser } = await supabase
+    let { data: dbUser, error: usernameError } = await supabase
       .from('users')
       .select('*')
       .eq('username', normalizedIdentifier)
@@ -39,36 +39,55 @@ export async function POST(request: NextRequest) {
 
     // If not found by username, try email
     if (!dbUser) {
-      const { data: userByEmail } = await supabase
+      const { data: userByEmail, error: emailError } = await supabase
         .from('users')
         .select('*')
         .eq('email', normalizedIdentifier)
         .maybeSingle();
       dbUser = userByEmail;
+
+      if (emailError) {
+        console.error('Email lookup error:', emailError);
+      }
+    }
+
+    if (usernameError) {
+      console.error('Username lookup error:', usernameError);
     }
 
     if (!dbUser) {
+      console.log('User not found for identifier:', normalizedIdentifier);
       return NextResponse.json<AuthResponse>(
         { success: false, error: 'Invalid username/email or password' },
         { status: 401 }
       );
     }
 
+    console.log('User found:', dbUser.id, dbUser.username);
+
     // Get credentials
-    const { data: credentials } = await supabase
+    const { data: credentials, error: credError } = await supabase
       .from('user_credentials')
       .select('*')
       .eq('user_id', dbUser.id)
       .maybeSingle();
 
+    if (credError) {
+      console.error('Credentials lookup error:', credError);
+    }
+
     if (!credentials) {
+      console.log('No credentials found for user:', dbUser.id);
       return NextResponse.json<AuthResponse>(
         { success: false, error: 'Invalid username/email or password' },
         { status: 401 }
       );
     }
 
+    console.log('Credentials found for user:', dbUser.id);
+
     // Verify password
+    console.log('Verifying password for user:', dbUser.id);
     const isValidPassword = await verifyPassword(
       password,
       credentials.password_hash,
@@ -76,11 +95,14 @@ export async function POST(request: NextRequest) {
     );
 
     if (!isValidPassword) {
+      console.log('Password verification failed for user:', dbUser.id);
       return NextResponse.json<AuthResponse>(
         { success: false, error: 'Invalid username/email or password' },
         { status: 401 }
       );
     }
+
+    console.log('Password verified successfully for user:', dbUser.id);
 
     // Get user's followers
     const { data: followers } = await supabase
