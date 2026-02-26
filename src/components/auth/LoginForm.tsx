@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useStore } from '@/store/useStore';
 import { Button, Input } from '@/components/ui';
@@ -114,6 +115,15 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
                 </svg>
               }
             />
+
+            <div className="flex justify-end">
+              <Link
+                href="/forgot-password"
+                className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+              >
+                Forgot password?
+              </Link>
+            </div>
 
             <Button
               type="submit"

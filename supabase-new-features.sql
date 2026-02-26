@@ -186,6 +186,30 @@ CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status);
 CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at DESC);
 
 -- ============================================
+-- 11. PASSWORD RESET TOKENS TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token VARCHAR(255) NOT NULL UNIQUE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Index for token lookups
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token) WHERE used = false;
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id);
+
+-- Clean up expired tokens function
+CREATE OR REPLACE FUNCTION clean_expired_password_tokens()
+RETURNS void AS $$
+BEGIN
+    DELETE FROM password_reset_tokens WHERE expires_at < NOW() OR used = true;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================
 -- HELPER FUNCTIONS
 -- ============================================
 
