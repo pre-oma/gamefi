@@ -10,17 +10,33 @@ if (supabaseUrl && supabaseAnonKey) {
   supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 }
 
+// Create a chainable mock for when Supabase is not configured
+const createChainableMock = () => {
+  const mock: any = {
+    data: null,
+    error: new Error('Supabase not configured'),
+  };
+
+  const chainable = () => mock;
+
+  // Add all chainable methods
+  const methods = ['select', 'insert', 'update', 'delete', 'eq', 'neq', 'gt', 'gte', 'lt', 'lte',
+    'like', 'ilike', 'is', 'in', 'contains', 'containedBy', 'range', 'overlaps', 'textSearch',
+    'match', 'not', 'or', 'filter', 'order', 'limit', 'single', 'maybeSingle', 'csv', 'returns'];
+
+  methods.forEach(method => {
+    mock[method] = chainable;
+  });
+
+  return mock;
+};
+
 // Export a proxy that throws helpful errors if Supabase is not configured
 export const supabase = new Proxy({} as SupabaseClient, {
   get(target, prop) {
     if (!supabaseClient) {
       if (prop === 'from') {
-        return () => ({
-          select: () => ({ data: null, error: new Error('Supabase not configured') }),
-          insert: () => ({ data: null, error: new Error('Supabase not configured') }),
-          update: () => ({ data: null, error: new Error('Supabase not configured') }),
-          delete: () => ({ data: null, error: new Error('Supabase not configured') }),
-        });
+        return () => createChainableMock();
       }
       throw new Error('Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.');
     }

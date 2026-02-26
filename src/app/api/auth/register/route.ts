@@ -40,16 +40,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if username or email already exists
-    const { data: existingUser } = await supabase
+    // Check if username already exists
+    const { data: existingUsername } = await supabase
       .from('users')
       .select('id')
-      .or(`username.eq.${username.toLowerCase()},email.eq.${email.toLowerCase()}`)
-      .single();
+      .eq('username', username.toLowerCase())
+      .maybeSingle();
 
-    if (existingUser) {
+    if (existingUsername) {
       return NextResponse.json<AuthResponse>(
-        { success: false, error: 'Username or email already exists' },
+        { success: false, error: 'Username already exists' },
+        { status: 400 }
+      );
+    }
+
+    // Check if email already exists
+    const { data: existingEmail } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email.toLowerCase())
+      .maybeSingle();
+
+    if (existingEmail) {
+      return NextResponse.json<AuthResponse>(
+        { success: false, error: 'Email already exists' },
         { status: 400 }
       );
     }
