@@ -7,8 +7,10 @@ import { MOCK_ASSETS, SECTORS, getAllAssets, addExternalAsset } from '@/data/ass
 import { cn, formatCurrency, formatPercent, formatNumber } from '@/lib/utils';
 import { useAssetSearch } from '@/hooks/useAssetSearch';
 import { Asset } from '@/types';
+import { useTheme } from '@/components/ThemeProvider';
 
 export default function MarketPage() {
+  const { resolvedTheme } = useTheme();
   const [selectedSector, setSelectedSector] = useState('All');
   const [sortBy, setSortBy] = useState<'name' | 'price' | 'change' | 'marketCap'>('marketCap');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -79,8 +81,8 @@ export default function MarketPage() {
   return (
     <AppLayout>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Market</h1>
-          <p className="text-slate-400">Browse available assets to build your investment team.</p>
+          <h1 className={cn('text-3xl font-bold mb-2', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>Market</h1>
+          <p className={cn(resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>Browse available assets to build your investment team.</p>
         </motion.div>
 
         {/* Market Stats */}
@@ -90,11 +92,17 @@ export default function MarketPage() {
           transition={{ delay: 0.1 }}
           className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
         >
-          <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+          <div className={cn(
+            'rounded-xl p-4 border',
+            resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+          )}>
             <p className="text-sm text-slate-500 mb-1">Total Assets</p>
-            <p className="text-2xl font-bold text-white">{marketStats.totalAssets}</p>
+            <p className={cn('text-2xl font-bold', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{marketStats.totalAssets}</p>
           </div>
-          <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+          <div className={cn(
+            'rounded-xl p-4 border',
+            resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+          )}>
             <p className="text-sm text-slate-500 mb-1">Gainers/Losers</p>
             <p className="text-2xl font-bold">
               <span className="text-emerald-400">{marketStats.gainers}</span>
@@ -102,15 +110,21 @@ export default function MarketPage() {
               <span className="text-red-400">{marketStats.losers}</span>
             </p>
           </div>
-          <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+          <div className={cn(
+            'rounded-xl p-4 border',
+            resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+          )}>
             <p className="text-sm text-slate-500 mb-1">Avg. Change</p>
             <p className={cn('text-2xl font-bold', marketStats.avgChange >= 0 ? 'text-emerald-400' : 'text-red-400')}>
               {formatPercent(marketStats.avgChange)}
             </p>
           </div>
-          <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+          <div className={cn(
+            'rounded-xl p-4 border',
+            resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+          )}>
             <p className="text-sm text-slate-500 mb-1">Total Market Cap</p>
-            <p className="text-2xl font-bold text-white">${formatNumber(marketStats.totalMarketCap)}</p>
+            <p className={cn('text-2xl font-bold', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>${formatNumber(marketStats.totalMarketCap)}</p>
           </div>
         </motion.div>
 
@@ -143,7 +157,12 @@ export default function MarketPage() {
           <select
             value={selectedSector}
             onChange={(e) => setSelectedSector(e.target.value)}
-            className="bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className={cn(
+              'rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 border',
+              resolvedTheme === 'dark'
+                ? 'bg-slate-800 border-slate-700 text-white'
+                : 'bg-white border-slate-300 text-slate-900'
+            )}
           >
             <option value="All">All Sectors</option>
             {SECTORS.map((sector) => (
@@ -173,13 +192,19 @@ export default function MarketPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden"
+          className={cn(
+            'rounded-2xl overflow-hidden border',
+            resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+          )}
         >
           {/* Table Header */}
-          <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-slate-800/50 text-xs font-medium text-slate-400 uppercase tracking-wider">
+          <div className={cn(
+            'grid grid-cols-12 gap-4 px-6 py-4 text-xs font-medium uppercase tracking-wider',
+            resolvedTheme === 'dark' ? 'bg-slate-800/50 text-slate-400' : 'bg-slate-50 text-slate-600'
+          )}>
             <button
               onClick={() => handleSort('name')}
-              className="col-span-4 flex items-center gap-1 hover:text-white transition-colors text-left"
+              className={cn('col-span-4 flex items-center gap-1 transition-colors text-left', resolvedTheme === 'dark' ? 'hover:text-white' : 'hover:text-slate-900')}
             >
               Asset
               {sortBy === 'name' && <span>{sortOrder === 'asc' ? '↑' : '↓'}</span>}
@@ -187,21 +212,21 @@ export default function MarketPage() {
             <div className="col-span-2">Sector</div>
             <button
               onClick={() => handleSort('price')}
-              className="col-span-2 flex items-center gap-1 hover:text-white transition-colors text-right justify-end"
+              className={cn('col-span-2 flex items-center gap-1 transition-colors text-right justify-end', resolvedTheme === 'dark' ? 'hover:text-white' : 'hover:text-slate-900')}
             >
               Price
               {sortBy === 'price' && <span>{sortOrder === 'asc' ? '↑' : '↓'}</span>}
             </button>
             <button
               onClick={() => handleSort('change')}
-              className="col-span-2 flex items-center gap-1 hover:text-white transition-colors text-right justify-end"
+              className={cn('col-span-2 flex items-center gap-1 transition-colors text-right justify-end', resolvedTheme === 'dark' ? 'hover:text-white' : 'hover:text-slate-900')}
             >
               24h Change
               {sortBy === 'change' && <span>{sortOrder === 'asc' ? '↑' : '↓'}</span>}
             </button>
             <button
               onClick={() => handleSort('marketCap')}
-              className="col-span-2 flex items-center gap-1 hover:text-white transition-colors text-right justify-end"
+              className={cn('col-span-2 flex items-center gap-1 transition-colors text-right justify-end', resolvedTheme === 'dark' ? 'hover:text-white' : 'hover:text-slate-900')}
             >
               Market Cap
               {sortBy === 'marketCap' && <span>{sortOrder === 'asc' ? '↑' : '↓'}</span>}
@@ -218,7 +243,7 @@ export default function MarketPage() {
 
           {/* Table Body */}
           {!isSearching && (
-            <div className="divide-y divide-slate-800">
+            <div className={cn('divide-y', resolvedTheme === 'dark' ? 'divide-slate-800' : 'divide-slate-100')}>
               {filteredAssets.map((asset, index) => {
                 const isExternal = !MOCK_ASSETS.some((a) => a.id === asset.id);
 
@@ -233,19 +258,28 @@ export default function MarketPage() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: Math.min(index * 0.02, 0.5) }}
-                    className="grid grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-slate-800/30 transition-colors"
+                    className={cn(
+                      'grid grid-cols-12 gap-4 px-6 py-4 items-center transition-colors',
+                      resolvedTheme === 'dark' ? 'hover:bg-slate-800/30' : 'hover:bg-slate-50'
+                    )}
                   >
                     {/* Asset Info */}
                     <div className="col-span-4 flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 bg-gradient-to-br from-slate-700 to-slate-800 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <span className="font-bold text-emerald-400 text-sm">{asset.symbol.slice(0, 2)}</span>
+                      <div className={cn(
+                        'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
+                        resolvedTheme === 'dark' ? 'bg-gradient-to-br from-slate-700 to-slate-800' : 'bg-slate-100'
+                      )}>
+                        <span className="font-bold text-emerald-500 text-sm">{asset.symbol.slice(0, 2)}</span>
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-white">{asset.symbol}</span>
-                          <span className="px-1.5 py-0.5 bg-slate-700 rounded text-xs text-slate-400 uppercase">{asset.type}</span>
+                          <span className={cn('font-semibold', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{asset.symbol}</span>
+                          <span className={cn(
+                            'px-1.5 py-0.5 rounded text-xs uppercase',
+                            resolvedTheme === 'dark' ? 'bg-slate-700 text-slate-400' : 'bg-slate-200 text-slate-600'
+                          )}>{asset.type}</span>
                           {isExternal && (
-                            <span className="px-1.5 py-0.5 bg-purple-500/20 rounded text-xs text-purple-400">Yahoo</span>
+                            <span className="px-1.5 py-0.5 bg-purple-500/20 rounded text-xs text-purple-500">Yahoo</span>
                           )}
                         </div>
                         <p className="text-sm text-slate-500 truncate">{asset.name}</p>
@@ -254,12 +288,12 @@ export default function MarketPage() {
 
                     {/* Sector */}
                     <div className="col-span-2">
-                      <span className="text-sm text-slate-400">{asset.sector}</span>
+                      <span className={cn('text-sm', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>{asset.sector}</span>
                     </div>
 
                     {/* Price */}
                     <div className="col-span-2 text-right">
-                      <span className="font-medium text-white">{formatCurrency(asset.currentPrice)}</span>
+                      <span className={cn('font-medium', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{formatCurrency(asset.currentPrice)}</span>
                     </div>
 
                     {/* Change */}
@@ -285,7 +319,7 @@ export default function MarketPage() {
 
                     {/* Market Cap */}
                     <div className="col-span-2 text-right">
-                      <span className="text-slate-400">${formatNumber(asset.marketCap)}</span>
+                      <span className={cn(resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>${formatNumber(asset.marketCap)}</span>
                     </div>
                   </motion.div>
                 );

@@ -25,7 +25,7 @@ import {
   CustomDateRange,
   CustomComparisonSymbol,
 } from '@/types';
-import { calculatePortfolioPerformance, formatPercent } from '@/lib/utils';
+import { calculatePortfolioPerformance, formatPercent, cn } from '@/lib/utils';
 import {
   getMultipleBenchmarkPerformances,
   getMultipleCustomSymbolPerformances,
@@ -33,11 +33,13 @@ import {
 import { calculatePortfolioHistoricalData, calculateMetricsFromHistoricalData } from '@/lib/portfolioHistoricalData';
 import { PortfolioHistoricalPoint } from '@/types';
 import { fetchMultipleFundamentals, AssetFundamentals } from '@/lib/yahooFundamentals';
+import { useTheme } from '@/components/ThemeProvider';
 
 const MAX_PORTFOLIOS = 4;
 const MIN_PORTFOLIOS = 1;
 
 export default function ComparePage() {
+  const { resolvedTheme } = useTheme();
   const { currentUser, isAuthenticated, loadData, portfolios, publicPortfolios } = useStore();
   const [selectedIds, setSelectedIds] = useState<string[]>(['']);
   const [users, setUsers] = useState<Map<string, User>>(new Map());
@@ -439,8 +441,8 @@ export default function ComparePage() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <h1 className="text-3xl font-bold text-white mb-2">Compare Portfolios</h1>
-          <p className="text-slate-400">
+          <h1 className={cn('text-3xl font-bold mb-2', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>Compare Portfolios</h1>
+          <p className={cn(resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>
             Compare up to {MAX_PORTFOLIOS} portfolios side by side to analyze their performance
           </p>
         </motion.div>
@@ -468,7 +470,12 @@ export default function ComparePage() {
           {selectedIds.length < MAX_PORTFOLIOS && (
             <button
               onClick={handleAddSlot}
-              className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-800/50 border border-slate-700 border-dashed rounded-xl text-slate-400 hover:text-white hover:border-slate-600 transition-colors"
+              className={cn(
+                'flex items-center justify-center gap-2 px-4 py-3 border border-dashed rounded-xl transition-colors',
+                resolvedTheme === 'dark'
+                  ? 'bg-slate-800/50 border-slate-700 text-slate-400 hover:text-white hover:border-slate-600'
+                  : 'bg-slate-100 border-slate-300 text-slate-600 hover:text-slate-900 hover:border-slate-400'
+              )}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -514,8 +521,11 @@ export default function ComparePage() {
             />
           </div>
           <div className="flex items-start gap-4">
-            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
-              <h3 className="text-sm font-medium text-slate-400 mb-3">Timeframe</h3>
+            <div className={cn(
+              'rounded-xl p-4 border',
+              resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+            )}>
+              <h3 className={cn('text-sm font-medium mb-3', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>Timeframe</h3>
               <div className="flex items-center gap-3">
                 <TimeframeSelector
                   selectedTimeframe={timeframe}
@@ -672,13 +682,16 @@ export default function ComparePage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="bg-slate-900/50 border border-slate-800 rounded-2xl p-12 text-center"
+            className={cn(
+              'rounded-2xl p-12 text-center border',
+              resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+            )}
           >
-            <svg className="w-16 h-16 text-slate-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-16 h-16 text-slate-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
-            <h3 className="text-xl font-semibold text-white mb-2">Select Portfolios to Compare</h3>
-            <p className="text-slate-400">
+            <h3 className={cn('text-xl font-semibold mb-2', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>Select Portfolios to Compare</h3>
+            <p className={cn(resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>
               Choose at least {MIN_PORTFOLIOS} portfolios from the dropdowns above to start comparing
             </p>
           </motion.div>

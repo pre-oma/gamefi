@@ -4,6 +4,8 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { AppLayout } from '@/components';
+import { useTheme } from '@/components/ThemeProvider';
+import { cn } from '@/lib/utils';
 
 interface GuideSection {
   id: string;
@@ -230,6 +232,8 @@ const sections: GuideSection[] = [
 ];
 
 export default function GuidePage() {
+  const { resolvedTheme } = useTheme();
+
   return (
     <AppLayout>
         {/* Page Header */}
@@ -238,8 +242,8 @@ export default function GuidePage() {
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-12"
         >
-          <h1 className="text-4xl font-bold text-white mb-4">How to Use Gamefi Invest</h1>
-          <p className="text-lg text-slate-400 max-w-2xl mx-auto">
+          <h1 className={cn('text-4xl font-bold mb-4', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>How to Use Gamefi Invest</h1>
+          <p className={cn('text-lg max-w-2xl mx-auto', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>
             Your complete guide to building winning investment portfolios using our soccer-themed platform
           </p>
         </motion.div>
@@ -249,15 +253,23 @@ export default function GuidePage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 mb-8"
+          className={cn(
+            'rounded-2xl p-6 mb-8 border',
+            resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+          )}
         >
-          <h2 className="text-lg font-semibold text-white mb-4">Quick Navigation</h2>
+          <h2 className={cn('text-lg font-semibold mb-4', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>Quick Navigation</h2>
           <div className="flex flex-wrap gap-2">
             {sections.map((section) => (
               <a
                 key={section.id}
                 href={`#${section.id}`}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-sm font-medium transition-colors"
+                className={cn(
+                  'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                  resolvedTheme === 'dark'
+                    ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900'
+                )}
               >
                 {section.title}
               </a>
@@ -274,17 +286,23 @@ export default function GuidePage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 + index * 0.05 }}
-              className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden"
+              className={cn(
+                'rounded-2xl overflow-hidden border',
+                resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+              )}
             >
-              <div className="px-6 py-4 border-b border-slate-800 flex items-center gap-3">
+              <div className={cn(
+                'px-6 py-4 flex items-center gap-3 border-b',
+                resolvedTheme === 'dark' ? 'border-slate-800' : 'border-slate-200'
+              )}>
                 <div className="w-10 h-10 bg-gradient-to-br from-emerald-500/20 to-teal-500/20 rounded-xl flex items-center justify-center">
                   <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={section.icon} />
                   </svg>
                 </div>
-                <h2 className="text-xl font-semibold text-white">{section.title}</h2>
+                <h2 className={cn('text-xl font-semibold', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{section.title}</h2>
               </div>
-              <div className="p-6 text-slate-300">
+              <div className={cn('p-6', resolvedTheme === 'dark' ? 'text-slate-300' : 'text-slate-700')}>
                 {section.content}
               </div>
             </motion.section>
@@ -298,7 +316,7 @@ export default function GuidePage() {
           transition={{ delay: 0.5 }}
           className="mt-12 text-center"
         >
-          <p className="text-slate-400 mb-4">Ready to start building your dream team?</p>
+          <p className={cn('mb-4', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>Ready to start building your dream team?</p>
           <Link
             href="/portfolio"
             className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold rounded-xl hover:from-emerald-600 hover:to-teal-600 transition-all"

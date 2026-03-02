@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Portfolio, User, PortfolioPerformance } from '@/types';
 import { FormationField } from '@/components/portfolio/FormationField';
 import { cn, formatCurrency, formatPercent } from '@/lib/utils';
+import { useTheme } from '@/components/ThemeProvider';
 
 interface ComparisonCardProps {
   portfolio: Portfolio;
@@ -23,20 +24,25 @@ export const ComparisonCard: React.FC<ComparisonCardProps> = ({
   onRemove,
   colorIndex,
 }) => {
+  const { resolvedTheme } = useTheme();
   const color = COLORS[colorIndex % COLORS.length];
   const filledPositions = portfolio.players.filter((p) => p.asset !== null).length;
 
   const colorClasses: Record<string, { border: string; bg: string; text: string }> = {
-    emerald: { border: 'border-emerald-500/50', bg: 'bg-emerald-500/10', text: 'text-emerald-400' },
-    blue: { border: 'border-blue-500/50', bg: 'bg-blue-500/10', text: 'text-blue-400' },
-    purple: { border: 'border-purple-500/50', bg: 'bg-purple-500/10', text: 'text-purple-400' },
-    amber: { border: 'border-amber-500/50', bg: 'bg-amber-500/10', text: 'text-amber-400' },
+    emerald: { border: 'border-emerald-500/50', bg: 'bg-emerald-500/10', text: 'text-emerald-500' },
+    blue: { border: 'border-blue-500/50', bg: 'bg-blue-500/10', text: 'text-blue-500' },
+    purple: { border: 'border-purple-500/50', bg: 'bg-purple-500/10', text: 'text-purple-500' },
+    amber: { border: 'border-amber-500/50', bg: 'bg-amber-500/10', text: 'text-amber-500' },
   };
 
   const classes = colorClasses[color];
 
   return (
-    <div className={cn('bg-slate-900/80 border-2 rounded-xl overflow-hidden', classes.border)}>
+    <div className={cn(
+      'border-2 rounded-xl overflow-hidden',
+      resolvedTheme === 'dark' ? 'bg-slate-900/80' : 'bg-white shadow-sm',
+      classes.border
+    )}>
       {/* Header */}
       <div className={cn('px-4 py-3 flex items-center justify-between', classes.bg)}>
         <div className="min-w-0">
@@ -47,7 +53,7 @@ export const ComparisonCard: React.FC<ComparisonCardProps> = ({
             {portfolio.name}
           </Link>
           {owner && (
-            <p className="text-xs text-slate-400 truncate">@{owner.username}</p>
+            <p className={cn('text-xs truncate', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>@{owner.username}</p>
           )}
         </div>
         <button
@@ -69,11 +75,11 @@ export const ComparisonCard: React.FC<ComparisonCardProps> = ({
 
       {/* Quick Stats */}
       <div className="px-4 pb-4 grid grid-cols-2 gap-2 text-center">
-        <div className="bg-slate-800/50 rounded-lg p-2">
+        <div className={cn('rounded-lg p-2', resolvedTheme === 'dark' ? 'bg-slate-800/50' : 'bg-slate-100')}>
           <p className="text-xs text-slate-500">Value</p>
-          <p className="text-sm font-semibold text-white">{formatCurrency(performance.totalValue)}</p>
+          <p className={cn('text-sm font-semibold', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{formatCurrency(performance.totalValue)}</p>
         </div>
-        <div className="bg-slate-800/50 rounded-lg p-2">
+        <div className={cn('rounded-lg p-2', resolvedTheme === 'dark' ? 'bg-slate-800/50' : 'bg-slate-100')}>
           <p className="text-xs text-slate-500">Return</p>
           <p className={cn(
             'text-sm font-semibold',
@@ -82,13 +88,13 @@ export const ComparisonCard: React.FC<ComparisonCardProps> = ({
             {formatPercent(performance.totalReturnPercent)}
           </p>
         </div>
-        <div className="bg-slate-800/50 rounded-lg p-2">
+        <div className={cn('rounded-lg p-2', resolvedTheme === 'dark' ? 'bg-slate-800/50' : 'bg-slate-100')}>
           <p className="text-xs text-slate-500">Formation</p>
-          <p className="text-sm font-medium text-white">{portfolio.formation}</p>
+          <p className={cn('text-sm font-medium', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{portfolio.formation}</p>
         </div>
-        <div className="bg-slate-800/50 rounded-lg p-2">
+        <div className={cn('rounded-lg p-2', resolvedTheme === 'dark' ? 'bg-slate-800/50' : 'bg-slate-100')}>
           <p className="text-xs text-slate-500">Players</p>
-          <p className="text-sm font-medium text-white">{filledPositions}/11</p>
+          <p className={cn('text-sm font-medium', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{filledPositions}/11</p>
         </div>
       </div>
     </div>

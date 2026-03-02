@@ -6,8 +6,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { AppLayout } from '@/components';
 import { COACHING_MODULES, DIFFICULTY_COLORS, CoachingModule, CoachingLesson } from '@/data/coaching-content';
 import { cn } from '@/lib/utils';
+import { useTheme } from '@/components/ThemeProvider';
 
 export default function CoachingArenaPage() {
+  const { resolvedTheme } = useTheme();
   const [selectedModule, setSelectedModule] = useState<CoachingModule | null>(null);
   const [selectedLesson, setSelectedLesson] = useState<CoachingLesson | null>(null);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
@@ -121,8 +123,8 @@ export default function CoachingArenaPage() {
             </svg>
             <span className="text-emerald-400 font-medium">Coaching Arena</span>
           </div>
-          <h1 className="text-4xl font-bold text-white mb-4">Master the Stock Market</h1>
-          <p className="text-xl text-slate-400 max-w-2xl mx-auto">
+          <h1 className={cn('text-4xl font-bold mb-4', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>Master the Stock Market</h1>
+          <p className={cn('text-xl max-w-2xl mx-auto', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>
             Learn the fundamentals of investing through interactive lessons. Understand stocks, risk types, and build your investment knowledge.
           </p>
         </motion.div>
@@ -144,7 +146,12 @@ export default function CoachingArenaPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.1 }}
                     onClick={() => setSelectedModule(module)}
-                    className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 cursor-pointer hover:border-emerald-500/30 transition-all duration-300 group"
+                    className={cn(
+                      'rounded-2xl p-6 cursor-pointer transition-all duration-300 group border',
+                      resolvedTheme === 'dark'
+                        ? 'bg-slate-900/50 border-slate-800 hover:border-emerald-500/30'
+                        : 'bg-white border-slate-200 hover:border-emerald-500/30 shadow-sm'
+                    )}
                   >
                     <div className="flex items-start justify-between mb-4">
                       <div className="w-12 h-12 bg-gradient-to-br from-emerald-500/20 to-teal-500/20 rounded-xl flex items-center justify-center group-hover:from-emerald-500/30 group-hover:to-teal-500/30 transition-all">
@@ -165,15 +172,15 @@ export default function CoachingArenaPage() {
                       </span>
                     </div>
 
-                    <h3 className="text-lg font-semibold text-white mb-2 group-hover:text-emerald-400 transition-colors">
+                    <h3 className={cn('text-lg font-semibold mb-2 group-hover:text-emerald-400 transition-colors', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>
                       {module.title}
                     </h3>
-                    <p className="text-slate-400 text-sm mb-4">{module.description}</p>
+                    <p className={cn('text-sm mb-4', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>{module.description}</p>
 
                     <div className="flex items-center justify-between">
                       <span className="text-slate-500 text-sm">{module.lessons.length} lessons</span>
                       <svg
-                        className="w-5 h-5 text-slate-600 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all"
+                        className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -195,8 +202,8 @@ export default function CoachingArenaPage() {
                 <div className="bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20 rounded-2xl p-8">
                   <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                     <div>
-                      <h3 className="text-2xl font-bold text-white mb-2">Ready to Start Learning?</h3>
-                      <p className="text-slate-400">
+                      <h3 className={cn('text-2xl font-bold mb-2', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>Ready to Start Learning?</h3>
+                      <p className={cn(resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>
                         Begin with Stock Market Basics if you're new, or jump to any module that interests you.
                       </p>
                     </div>
@@ -205,7 +212,7 @@ export default function CoachingArenaPage() {
                         <div className="text-3xl font-bold text-emerald-400">{COACHING_MODULES.length}</div>
                         <div className="text-slate-500">Modules</div>
                       </div>
-                      <div className="w-px h-12 bg-slate-700" />
+                      <div className={cn('w-px h-12', resolvedTheme === 'dark' ? 'bg-slate-700' : 'bg-slate-300')} />
                       <div className="text-center">
                         <div className="text-3xl font-bold text-teal-400">
                           {COACHING_MODULES.reduce((acc, m) => acc + m.lessons.length, 0)}
