@@ -6,6 +6,7 @@ import { Challenge, CHALLENGE_XP, CHALLENGE_TIMEFRAMES } from '@/types';
 import { useStore } from '@/store/useStore';
 import { cn, formatPercent, getRelativeTime } from '@/lib/utils';
 import { Button } from '@/components/ui';
+import { useTheme } from '@/components/ThemeProvider';
 
 interface ChallengeCardProps {
   challenge: Challenge;
@@ -16,6 +17,7 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
   challenge,
   showActions = true,
 }) => {
+  const { resolvedTheme } = useTheme();
   const { currentUser, acceptChallenge, declineChallenge, cancelChallenge, portfolios } = useStore();
   const [isLoading, setIsLoading] = React.useState(false);
   const [selectedPortfolioId, setSelectedPortfolioId] = React.useState<string>('');
@@ -102,10 +104,18 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden hover:border-slate-700 transition-all duration-300"
+      className={cn(
+        'rounded-2xl overflow-hidden transition-all duration-300 border',
+        resolvedTheme === 'dark'
+          ? 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+          : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+      )}
     >
       {/* Header */}
-      <div className="p-4 border-b border-slate-800">
+      <div className={cn(
+        'p-4 border-b',
+        resolvedTheme === 'dark' ? 'border-slate-800' : 'border-slate-200'
+      )}>
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             {challenge.type === 'sp500' ? (
@@ -122,10 +132,10 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
               </div>
             )}
             <div>
-              <h3 className="font-semibold text-white">
+              <h3 className={cn('font-semibold', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>
                 {challenge.type === 'sp500' ? 'vs S&P 500' : 'vs User'}
               </h3>
-              <p className="text-sm text-slate-400">{timeframeLabel} Challenge</p>
+              <p className={cn('text-sm', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>{timeframeLabel} Challenge</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -144,10 +154,10 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
               alt={challenge.challengerUsername}
               className="w-12 h-12 rounded-full mx-auto mb-2 ring-2 ring-emerald-500/30"
             />
-            <p className="text-sm font-medium text-white truncate">
+            <p className={cn('text-sm font-medium truncate', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>
               {isChallenger ? 'You' : challenge.challengerUsername}
             </p>
-            <p className="text-xs text-slate-400 truncate">{challenge.challengerPortfolioName}</p>
+            <p className={cn('text-xs truncate', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>{challenge.challengerPortfolioName}</p>
             {isActive && challenge.challengerReturnPercent !== null && (
               <p className={cn(
                 'text-sm font-semibold mt-1',
@@ -160,8 +170,11 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
 
           {/* VS */}
           <div className="flex-shrink-0">
-            <div className="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center">
-              <span className="text-sm font-bold text-slate-400">VS</span>
+            <div className={cn(
+              'w-12 h-12 rounded-full flex items-center justify-center',
+              resolvedTheme === 'dark' ? 'bg-slate-800' : 'bg-slate-100'
+            )}>
+              <span className={cn('text-sm font-bold', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>VS</span>
             </div>
             <p className="text-xs text-slate-500 text-center mt-1">{xpAtStake} XP</p>
           </div>
@@ -173,8 +186,8 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
                 <div className="w-12 h-12 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full mx-auto mb-2 flex items-center justify-center">
                   <span className="text-xs font-bold text-white">SPY</span>
                 </div>
-                <p className="text-sm font-medium text-white">S&P 500</p>
-                <p className="text-xs text-slate-400">Index</p>
+                <p className={cn('text-sm font-medium', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>S&P 500</p>
+                <p className={cn('text-xs', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>Index</p>
                 {isActive && challenge.opponentReturnPercent !== null && (
                   <p className={cn(
                     'text-sm font-semibold mt-1',
@@ -191,10 +204,10 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
                   alt={challenge.opponentUsername}
                   className="w-12 h-12 rounded-full mx-auto mb-2 ring-2 ring-purple-500/30"
                 />
-                <p className="text-sm font-medium text-white truncate">
+                <p className={cn('text-sm font-medium truncate', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>
                   {isOpponent ? 'You' : challenge.opponentUsername}
                 </p>
-                <p className="text-xs text-slate-400 truncate">{challenge.opponentPortfolioName}</p>
+                <p className={cn('text-xs truncate', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>{challenge.opponentPortfolioName}</p>
                 {isActive && challenge.opponentReturnPercent !== null && (
                   <p className={cn(
                     'text-sm font-semibold mt-1',
@@ -211,8 +224,11 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
 
       {/* Time/Status Info */}
       <div className="px-4 pb-2">
-        <div className="flex items-center justify-between py-3 border-t border-slate-800 text-sm">
-          <span className="text-slate-400">
+        <div className={cn(
+          'flex items-center justify-between py-3 border-t text-sm',
+          resolvedTheme === 'dark' ? 'border-slate-800' : 'border-slate-200'
+        )}>
+          <span className={cn(resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>
             {isActive ? getTimeRemaining() : `Created ${getRelativeTime(challenge.createdAt)}`}
           </span>
           {challenge.startDate && (
@@ -225,14 +241,22 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
 
       {/* Actions */}
       {showActions && (
-        <div className="px-4 pb-4 pt-2 border-t border-slate-800">
+        <div className={cn(
+          'px-4 pb-4 pt-2 border-t',
+          resolvedTheme === 'dark' ? 'border-slate-800' : 'border-slate-200'
+        )}>
           {/* Pending invite - show accept/decline for opponent */}
           {isPending && isOpponent && (
             <div className="space-y-3">
               <select
                 value={selectedPortfolioId}
                 onChange={(e) => setSelectedPortfolioId(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-emerald-500"
+                className={cn(
+                  'w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-emerald-500 border',
+                  resolvedTheme === 'dark'
+                    ? 'bg-slate-800 border-slate-700 text-white'
+                    : 'bg-white border-slate-300 text-slate-900'
+                )}
               >
                 <option value="">Select your portfolio</option>
                 {portfolios.map((p) => (
@@ -273,7 +297,7 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
 
           {/* Active - show progress indicator */}
           {isActive && (
-            <div className="text-center text-sm text-slate-400">
+            <div className={cn('text-center text-sm', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>
               Challenge in progress...
             </div>
           )}

@@ -24,23 +24,23 @@
 
 /* Light theme */
 .light {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --background: #f1f5f9;
+  --foreground: #1e293b;
   --card: #ffffff;
-  --card-foreground: #0f172a;
-  --border: #e2e8f0;
+  --card-foreground: #1e293b;
+  --border: #cbd5e1;
   --input: #ffffff;
   --primary: #059669;
   --primary-foreground: #ffffff;
-  --secondary: #f1f5f9;
-  --secondary-foreground: #0f172a;
+  --secondary: #e2e8f0;
+  --secondary-foreground: #1e293b;
   --muted: #e2e8f0;
-  --muted-foreground: #64748b;
+  --muted-foreground: #475569;
   --accent: #059669;
   --accent-foreground: #ffffff;
-  --scrollbar-track: #f1f5f9;
-  --scrollbar-thumb: #cbd5e1;
-  --scrollbar-thumb-hover: #94a3b8;
+  --scrollbar-track: #e2e8f0;
+  --scrollbar-thumb: #94a3b8;
+  --scrollbar-thumb-hover: #64748b;
 }
 
 @theme inline {
@@ -171,8 +171,9 @@ input[type="number"] {
 }
 
 .light .theme-card {
-  background: rgba(255, 255, 255, 0.8);
-  border-color: rgba(226, 232, 240, 1);
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 /* Theme-aware text colors */
@@ -181,7 +182,7 @@ input[type="number"] {
 }
 
 .light .theme-text-primary {
-  color: #0f172a;
+  color: #1e293b;
 }
 
 .dark .theme-text-secondary {
@@ -189,5 +190,70 @@ input[type="number"] {
 }
 
 .light .theme-text-secondary {
-  color: #64748b;
+  color: #475569;
+}
+
+/* Light mode specific overrides for better visibility */
+.light {
+  /* Override slate colors for better contrast */
+  --tw-text-opacity: 1;
+}
+
+/* Light mode card with shadow */
+.light .card-elevated {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Light mode inputs */
+.light input,
+.light select,
+.light textarea {
+  background-color: #ffffff;
+  border-color: #cbd5e1;
+  color: #1e293b;
+}
+
+.light input::placeholder,
+.light textarea::placeholder {
+  color: #94a3b8;
+}
+
+.light input:focus,
+.light select:focus,
+.light textarea:focus {
+  border-color: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+/* Light mode buttons */
+.light .btn-secondary {
+  background: #e2e8f0;
+  color: #1e293b;
+  border: 1px solid #cbd5e1;
+}
+
+.light .btn-secondary:hover {
+  background: #cbd5e1;
+}
+
+/* Ensure text visibility in light mode */
+.light h1, .light h2, .light h3, .light h4, .light h5, .light h6 {
+  color: #1e293b;
+}
+
+.light p {
+  color: #475569;
+}
+
+/* Stats and badges in light mode */
+.light .stat-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+}
+
+.light .badge {
+  background: #e2e8f0;
+  color: #1e293b;
 }

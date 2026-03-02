@@ -3,6 +3,7 @@
 import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { useTheme } from '@/components/ThemeProvider';
 
 interface ModalProps {
   isOpen: boolean;
@@ -19,6 +20,7 @@ export const Modal: React.FC<ModalProps> = ({
   children,
   size = 'md',
 }) => {
+  const { resolvedTheme } = useTheme();
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -63,18 +65,32 @@ export const Modal: React.FC<ModalProps> = ({
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ type: 'spring', duration: 0.3 }}
             className={cn(
-              'relative w-full bg-slate-900 rounded-2xl shadow-2xl border border-slate-800',
+              'relative w-full rounded-2xl shadow-2xl border',
               'max-h-[90vh] overflow-hidden flex flex-col',
+              resolvedTheme === 'dark'
+                ? 'bg-slate-900 border-slate-800'
+                : 'bg-white border-slate-200',
               sizes[size]
             )}
           >
             {/* Header */}
             {title && (
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
-                <h2 className="text-xl font-semibold text-white">{title}</h2>
+              <div className={cn(
+                'flex items-center justify-between px-6 py-4 border-b',
+                resolvedTheme === 'dark' ? 'border-slate-800' : 'border-slate-200'
+              )}>
+                <h2 className={cn(
+                  'text-xl font-semibold',
+                  resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900'
+                )}>{title}</h2>
                 <button
                   onClick={onClose}
-                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                  className={cn(
+                    'p-2 rounded-lg transition-colors',
+                    resolvedTheme === 'dark'
+                      ? 'text-slate-400 hover:text-white hover:bg-slate-800'
+                      : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                  )}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
