@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { AnimatePresence } from 'framer-motion';
 import { useStore } from '@/store/useStore';
+import { useTheme } from '@/components/ThemeProvider';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { BetaBanner } from '../BetaBanner';
@@ -18,6 +19,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const router = useRouter();
   const pathname = usePathname();
   const { isAuthenticated, isLoading, loadData } = useStore();
+  const { resolvedTheme } = useTheme();
 
   // Sidebar state
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -58,14 +60,20 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   // Show loading state
   if (isLoading || !isAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className={cn(
+        'min-h-screen flex items-center justify-center transition-colors',
+        resolvedTheme === 'dark' ? 'bg-slate-950' : 'bg-slate-100'
+      )}>
         <div className="w-16 h-16 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className={cn(
+      'min-h-screen transition-colors duration-300',
+      resolvedTheme === 'dark' ? 'bg-slate-950' : 'bg-slate-100'
+    )}>
       {/* Beta Banner */}
       <BetaBanner />
 

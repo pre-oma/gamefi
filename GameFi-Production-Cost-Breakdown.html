@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GameFi Invest - Production Deployment Cost Breakdown</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #fff;
+        }
+
+        h1 {
+            color: #10b981;
+            font-size: 28px;
+            margin-bottom: 10px;
+            border-bottom: 3px solid #10b981;
+            padding-bottom: 10px;
+        }
+
+        h2 {
+            color: #1e293b;
+            font-size: 20px;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        h3 {
+            color: #475569;
+            font-size: 16px;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        p {
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #64748b;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        .date {
+            color: #94a3b8;
+            font-size: 12px;
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #e2e8f0;
+        }
+
+        th {
+            background: #f8fafc;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        .highlight {
+            background: #ecfdf5 !important;
+            font-weight: 600;
+        }
+
+        .total-row {
+            background: #10b981 !important;
+            color: white;
+            font-weight: 700;
+        }
+
+        .total-row td {
+            border-color: #059669;
+        }
+
+        .recommendation {
+            background: #f0fdf4;
+            border-left: 4px solid #10b981;
+            padding: 12px 16px;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+
+        .recommendation strong {
+            color: #059669;
+        }
+
+        .section-box {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .checklist {
+            list-style: none;
+            padding: 0;
+        }
+
+        .checklist li {
+            padding: 8px 0;
+            padding-left: 28px;
+            position: relative;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .checklist li:last-child {
+            border-bottom: none;
+        }
+
+        .checklist li::before {
+            content: "☐";
+            position: absolute;
+            left: 0;
+            color: #10b981;
+            font-size: 16px;
+        }
+
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 16px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+
+        .code-block .comment {
+            color: #64748b;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .summary-card {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .summary-card.primary {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+        }
+
+        .summary-card h4 {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+            opacity: 0.8;
+        }
+
+        .summary-card .amount {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .summary-card .period {
+            font-size: 12px;
+            opacity: 0.7;
+        }
+
+        .page-break {
+            page-break-before: always;
+        }
+
+        @media print {
+            body {
+                padding: 20px;
+            }
+
+            .page-break {
+                page-break-before: always;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>GameFi Invest</h1>
+    <p class="subtitle">Production Deployment Cost Breakdown & Implementation Guide</p>
+    <p class="date">Generated: February 2026</p>
+
+    <h2>Current Architecture Overview</h2>
+    <table>
+        <tr>
+            <th>Component</th>
+            <th>Technology</th>
+        </tr>
+        <tr>
+            <td>Frontend/Backend</td>
+            <td>Next.js 16 (App Router)</td>
+        </tr>
+        <tr>
+            <td>Database</td>
+            <td>Supabase (PostgreSQL)</td>
+        </tr>
+        <tr>
+            <td>Hosting</td>
+            <td>Vercel</td>
+        </tr>
+        <tr>
+            <td>Stock Data</td>
+            <td>Yahoo Finance API (unofficial)</td>
+        </tr>
+        <tr>
+            <td>Authentication</td>
+            <td>Custom (password hashing)</td>
+        </tr>
+    </table>
+
+    <h2>Cost Breakdown by Service</h2>
+
+    <h3>1. Hosting - Vercel</h3>
+    <table>
+        <tr>
+            <th>Tier</th>
+            <th>Cost</th>
+            <th>Features</th>
+        </tr>
+        <tr class="highlight">
+            <td>Hobby (Current)</td>
+            <td>Free</td>
+            <td>100GB bandwidth, serverless functions, 1 project</td>
+        </tr>
+        <tr>
+            <td>Pro (Recommended)</td>
+            <td>$20/month</td>
+            <td>Unlimited bandwidth, team features, preview deployments</td>
+        </tr>
+        <tr>
+            <td>Enterprise</td>
+            <td>Custom</td>
+            <td>SSO, SLA, dedicated support</td>
+        </tr>
+    </table>
+    <div class="recommendation">
+        <strong>Recommendation:</strong> Start with Hobby (free), upgrade to Pro ($20/mo) when you have paying users or need team collaboration.
+    </div>
+
+    <h3>2. Database - Supabase</h3>
+    <table>
+        <tr>
+            <th>Tier</th>
+            <th>Cost</th>
+            <th>Features</th>
+        </tr>
+        <tr class="highlight">
+            <td>Free</td>
+            <td>$0</td>
+            <td>500MB database, 1GB storage, 50K monthly active users</td>
+        </tr>
+        <tr>
+            <td>Pro</td>
+            <td>$25/month</td>
+            <td>8GB database, 100GB storage, daily backups</td>
+        </tr>
+        <tr>
+            <td>Team</td>
+            <td>$599/month</td>
+            <td>100GB database, priority support, SOC2 compliance</td>
+        </tr>
+    </table>
+    <div class="recommendation">
+        <strong>Recommendation:</strong> Start with Free, upgrade to Pro ($25/mo) when approaching limits or need reliability.
+    </div>
+
+    <h3>3. Domain Name</h3>
+    <table>
+        <tr>
+            <th>Provider</th>
+            <th>Cost</th>
+        </tr>
+        <tr>
+            <td>Namecheap</td>
+            <td>$10-15/year (.com)</td>
+        </tr>
+        <tr>
+            <td>Google Domains</td>
+            <td>$12/year (.com)</td>
+        </tr>
+        <tr class="highlight">
+            <td>Cloudflare</td>
+            <td>$9-10/year (.com)</td>
+        </tr>
+    </table>
+    <div class="recommendation">
+        <strong>Recommendation:</strong> ~$12/year for a .com domain
+    </div>
+
+    <div class="page-break"></div>
+
+    <h3>4. Stock Market Data API</h3>
+    <p><strong>Current:</strong> Yahoo Finance (unofficial, free, unreliable for production)</p>
+    <table>
+        <tr>
+            <th>Provider</th>
+            <th>Free Tier</th>
+            <th>Paid Tier</th>
+            <th>Notes</th>
+        </tr>
+        <tr>
+            <td>Alpha Vantage</td>
+            <td>25 req/day</td>
+            <td>$50/month</td>
+            <td>Good for starting</td>
+        </tr>
+        <tr>
+            <td>Polygon.io</td>
+            <td>Limited</td>
+            <td>$29-79/month</td>
+            <td>Real-time data</td>
+        </tr>
+        <tr class="highlight">
+            <td>Finnhub</td>
+            <td>60 req/min</td>
+            <td>$50/month</td>
+            <td>Good free tier</td>
+        </tr>
+        <tr>
+            <td>IEX Cloud</td>
+            <td>N/A</td>
+            <td>$9-49/month</td>
+            <td>Pay-per-use</td>
+        </tr>
+        <tr>
+            <td>Twelve Data</td>
+            <td>800 req/day</td>
+            <td>$29/month</td>
+            <td>Good balance</td>
+        </tr>
+    </table>
+    <div class="recommendation">
+        <strong>Recommendation:</strong> Start with Finnhub Free or Alpha Vantage Free, budget $30-50/mo for growth.
+    </div>
+
+    <h3>5. Email Service (Password Reset, Notifications)</h3>
+    <table>
+        <tr>
+            <th>Provider</th>
+            <th>Free Tier</th>
+            <th>Paid Tier</th>
+        </tr>
+        <tr class="highlight">
+            <td>Resend</td>
+            <td>3,000 emails/mo</td>
+            <td>$20/mo (50K emails)</td>
+        </tr>
+        <tr>
+            <td>SendGrid</td>
+            <td>100 emails/day</td>
+            <td>$15/mo (40K emails)</td>
+        </tr>
+        <tr>
+            <td>Postmark</td>
+            <td>100 emails/mo</td>
+            <td>$15/mo (10K emails)</td>
+        </tr>
+        <tr>
+            <td>AWS SES</td>
+            <td>N/A</td>
+            <td>$0.10 per 1K emails</td>
+        </tr>
+    </table>
+    <div class="recommendation">
+        <strong>Recommendation:</strong> Start with Resend Free (3K/mo), budget $15-20/mo for growth.
+    </div>
+
+    <h3>6. AI Development Tools - Claude (Anthropic)</h3>
+    <p><strong>Purpose:</strong> AI-assisted development, code generation, debugging, and maintenance</p>
+    <table>
+        <tr>
+            <th>Plan</th>
+            <th>Cost</th>
+            <th>Features</th>
+        </tr>
+        <tr>
+            <td>Claude Free</td>
+            <td>$0</td>
+            <td>Limited messages per day, basic access</td>
+        </tr>
+        <tr class="highlight">
+            <td>Claude Pro</td>
+            <td>$20/month</td>
+            <td>5x more usage, priority access, Claude 3.5 Sonnet & Opus</td>
+        </tr>
+        <tr>
+            <td>Claude Team</td>
+            <td>$25/user/month</td>
+            <td>Higher limits, team collaboration, admin controls</td>
+        </tr>
+        <tr>
+            <td>Claude Enterprise</td>
+            <td>Custom</td>
+            <td>Unlimited usage, SSO, dedicated support</td>
+        </tr>
+    </table>
+    <div class="recommendation">
+        <strong>Recommendation:</strong> Claude Pro ($20/mo) is highly recommended for ongoing development, debugging, and adding new features. ROI is significant given the development time saved.
+    </div>
+
+    <h3>7. Optional Services</h3>
+    <table>
+        <tr>
+            <th>Service</th>
+            <th>Purpose</th>
+            <th>Cost</th>
+        </tr>
+        <tr>
+            <td>Sentry</td>
+            <td>Error monitoring</td>
+            <td>Free (5K errors/mo) / $26/mo</td>
+        </tr>
+        <tr>
+            <td>PostHog</td>
+            <td>Analytics</td>
+            <td>Free (1M events)</td>
+        </tr>
+        <tr>
+            <td>Cloudflare</td>
+            <td>CDN/DDoS protection</td>
+            <td>Free / $20/mo (Pro)</td>
+        </tr>
+        <tr>
+            <td>Uptime Robot</td>
+            <td>Uptime monitoring</td>
+            <td>Free (50 monitors)</td>
+        </tr>
+    </table>
+
+    <h2>8. Manpower & Development Costs</h2>
+    <p><strong>Note:</strong> These are estimated costs for hiring developers to build and maintain the platform.</p>
+
+    <h3>Initial Development (Already Completed)</h3>
+    <table>
+        <tr>
+            <th>Work Item</th>
+            <th>Estimated Hours</th>
+            <th>Freelancer Rate</th>
+            <th>Estimated Cost</th>
+        </tr>
+        <tr>
+            <td>Core Platform (Next.js, Auth, Database)</td>
+            <td>80-120 hours</td>
+            <td>$50-100/hr</td>
+            <td>$4,000 - $12,000</td>
+        </tr>
+        <tr>
+            <td>Portfolio Management System</td>
+            <td>40-60 hours</td>
+            <td>$50-100/hr</td>
+            <td>$2,000 - $6,000</td>
+        </tr>
+        <tr>
+            <td>Stock API Integration & Caching</td>
+            <td>30-50 hours</td>
+            <td>$50-100/hr</td>
+            <td>$1,500 - $5,000</td>
+        </tr>
+        <tr>
+            <td>Gamification (XP, Badges, Challenges)</td>
+            <td>60-80 hours</td>
+            <td>$50-100/hr</td>
+            <td>$3,000 - $8,000</td>
+        </tr>
+        <tr>
+            <td>UI/UX Design & Components</td>
+            <td>40-60 hours</td>
+            <td>$50-100/hr</td>
+            <td>$2,000 - $6,000</td>
+        </tr>
+        <tr>
+            <td>Social Features (Following, Compare)</td>
+            <td>30-40 hours</td>
+            <td>$50-100/hr</td>
+            <td>$1,500 - $4,000</td>
+        </tr>
+        <tr>
+            <td>Learning Module</td>
+            <td>20-30 hours</td>
+            <td>$50-100/hr</td>
+            <td>$1,000 - $3,000</td>
+        </tr>
+        <tr>
+            <td>PWA, Settings, Additional Features</td>
+            <td>30-40 hours</td>
+            <td>$50-100/hr</td>
+            <td>$1,500 - $4,000</td>
+        </tr>
+        <tr class="total-row">
+            <td><strong>TOTAL INITIAL DEVELOPMENT</strong></td>
+            <td><strong>330-480 hours</strong></td>
+            <td></td>
+            <td><strong>$16,500 - $48,000</strong></td>
+        </tr>
+    </table>
+    <div class="recommendation">
+        <strong>Note:</strong> This development was completed using AI-assisted development (Claude), significantly reducing costs and time. Traditional development at agency rates ($100-150/hr) would be $33,000-$72,000+.
+    </div>
+
+    <h3>Ongoing Development & Maintenance</h3>
+    <table>
+        <tr>
+            <th>Option</th>
+            <th>Hours/Month</th>
+            <th>Monthly Cost</th>
+            <th>Best For</th>
+        </tr>
+        <tr class="highlight">
+            <td>Self + Claude Pro</td>
+            <td>Flexible</td>
+            <td>$20/month</td>
+            <td>Solo founder, learning to code</td>
+        </tr>
+        <tr>
+            <td>Freelancer (Part-time)</td>
+            <td>10-20 hrs</td>
+            <td>$500 - $2,000</td>
+            <td>Bug fixes, small features</td>
+        </tr>
+        <tr>
+            <td>Freelancer (Dedicated)</td>
+            <td>40-80 hrs</td>
+            <td>$2,000 - $8,000</td>
+            <td>Active development</td>
+        </tr>
+        <tr>
+            <td>Part-time Developer</td>
+            <td>80 hrs</td>
+            <td>$3,000 - $5,000</td>
+            <td>Consistent progress</td>
+        </tr>
+        <tr>
+            <td>Full-time Developer (Remote)</td>
+            <td>160 hrs</td>
+            <td>$4,000 - $12,000</td>
+            <td>Rapid scaling</td>
+        </tr>
+        <tr>
+            <td>Development Agency</td>
+            <td>As needed</td>
+            <td>$5,000 - $20,000+</td>
+            <td>Enterprise features</td>
+        </tr>
+    </table>
+
+    <h3>Hiring Platforms & Rates</h3>
+    <table>
+        <tr>
+            <th>Platform</th>
+            <th>Developer Type</th>
+            <th>Typical Rate</th>
+        </tr>
+        <tr>
+            <td>Upwork</td>
+            <td>Freelance (Global)</td>
+            <td>$25-100/hr</td>
+        </tr>
+        <tr>
+            <td>Toptal</td>
+            <td>Vetted Senior</td>
+            <td>$60-150/hr</td>
+        </tr>
+        <tr>
+            <td>Fiverr</td>
+            <td>Task-based</td>
+            <td>$50-500/task</td>
+        </tr>
+        <tr>
+            <td>Remote OK / We Work Remotely</td>
+            <td>Full-time Remote</td>
+            <td>$4,000-12,000/mo</td>
+        </tr>
+        <tr>
+            <td>Local (US/UK/AU)</td>
+            <td>Full-time</td>
+            <td>$8,000-15,000/mo</td>
+        </tr>
+        <tr>
+            <td>Latin America / Eastern Europe</td>
+            <td>Full-time Remote</td>
+            <td>$3,000-6,000/mo</td>
+        </tr>
+        <tr>
+            <td>Southeast Asia / India</td>
+            <td>Full-time Remote</td>
+            <td>$1,500-4,000/mo</td>
+        </tr>
+    </table>
+    <div class="recommendation">
+        <strong>Recommendation:</strong> For a solo founder, continue using Claude Pro ($20/mo) for development. When revenue allows, consider a part-time freelancer ($500-1,000/mo) for specific tasks. Scale to dedicated developers only when user growth demands it.
+    </div>
+
+    <div class="page-break"></div>
+
+    <h2>Total Cost Summary</h2>
+
+    <div class="summary-grid">
+        <div class="summary-card primary">
+            <h4>MVP Launch</h4>
+            <div class="amount">~$21</div>
+            <div class="period">per month (services + Claude)</div>
+        </div>
+        <div class="summary-card">
+            <h4>Small Scale</h4>
+            <div class="amount">~$111</div>
+            <div class="period">per month (services + Claude)</div>
+        </div>
+        <div class="summary-card">
+            <h4>Growth Stage</h4>
+            <div class="amount">~$196</div>
+            <div class="period">per month (services + Claude)</div>
+        </div>
+    </div>
+
+    <p style="text-align: center; color: #64748b; font-size: 13px; margin-top: 10px;">
+        <em>Note: Add $500-2,000/month for part-time freelancer or $3,000-8,000/month for dedicated developer if not self-managing</em>
+    </p>
+
+    <h3>MVP Launch (Minimum Viable Production)</h3>
+    <table>
+        <tr>
+            <th>Item</th>
+            <th>Monthly Cost</th>
+        </tr>
+        <tr>
+            <td>Vercel Hobby</td>
+            <td>$0</td>
+        </tr>
+        <tr>
+            <td>Supabase Free</td>
+            <td>$0</td>
+        </tr>
+        <tr>
+            <td>Domain (annualized)</td>
+            <td>~$1</td>
+        </tr>
+        <tr>
+            <td>Stock API (Free tier)</td>
+            <td>$0</td>
+        </tr>
+        <tr>
+            <td>Email (Free tier)</td>
+            <td>$0</td>
+        </tr>
+        <tr class="highlight">
+            <td>Claude Pro (AI Development)</td>
+            <td>$20</td>
+        </tr>
+        <tr class="total-row">
+            <td><strong>TOTAL</strong></td>
+            <td><strong>~$21/month</strong></td>
+        </tr>
+    </table>
+
+    <h3>Small Scale Production (100-1,000 users)</h3>
+    <table>
+        <tr>
+            <th>Item</th>
+            <th>Monthly Cost</th>
+        </tr>
+        <tr>
+            <td>Vercel Pro</td>
+            <td>$20</td>
+        </tr>
+        <tr>
+            <td>Supabase Pro</td>
+            <td>$25</td>
+        </tr>
+        <tr>
+            <td>Domain</td>
+            <td>~$1</td>
+        </tr>
+        <tr>
+            <td>Stock API (Paid)</td>
+            <td>$30</td>
+        </tr>
+        <tr>
+            <td>Email Service</td>
+            <td>$15</td>
+        </tr>
+        <tr>
+            <td>Error Monitoring</td>
+            <td>$0 (free tier)</td>
+        </tr>
+        <tr class="highlight">
+            <td>Claude Pro (AI Development)</td>
+            <td>$20</td>
+        </tr>
+        <tr class="total-row">
+            <td><strong>TOTAL</strong></td>
+            <td><strong>~$111/month</strong></td>
+        </tr>
+    </table>
+
+    <h3>Growth Stage (1,000-10,000 users)</h3>
+    <table>
+        <tr>
+            <th>Item</th>
+            <th>Monthly Cost</th>
+        </tr>
+        <tr>
+            <td>Vercel Pro</td>
+            <td>$20</td>
+        </tr>
+        <tr>
+            <td>Supabase Pro</td>
+            <td>$25</td>
+        </tr>
+        <tr>
+            <td>Domain</td>
+            <td>~$1</td>
+        </tr>
+        <tr>
+            <td>Stock API (Premium)</td>
+            <td>$79</td>
+        </tr>
+        <tr>
+            <td>Email Service</td>
+            <td>$20</td>
+        </tr>
+        <tr>
+            <td>Error Monitoring</td>
+            <td>$26</td>
+        </tr>
+        <tr>
+            <td>Analytics</td>
+            <td>$0 (PostHog free)</td>
+        </tr>
+        <tr class="highlight">
+            <td>Claude Team (AI Development)</td>
+            <td>$25</td>
+        </tr>
+        <tr class="total-row">
+            <td><strong>TOTAL</strong></td>
+            <td><strong>~$196/month</strong></td>
+        </tr>
+    </table>
+
+    <h3>Complete Cost Summary (Services + Manpower)</h3>
+    <table>
+        <tr>
+            <th>Scenario</th>
+            <th>Services/Tools</th>
+            <th>Manpower</th>
+            <th>Total Monthly</th>
+        </tr>
+        <tr class="highlight">
+            <td><strong>Bootstrap (Solo + AI)</strong></td>
+            <td>$21</td>
+            <td>$0 (self + Claude)</td>
+            <td><strong>$21/month</strong></td>
+        </tr>
+        <tr>
+            <td>MVP + Part-time Help</td>
+            <td>$21</td>
+            <td>$500-1,000</td>
+            <td>$521-1,021/month</td>
+        </tr>
+        <tr>
+            <td>Small Scale + Freelancer</td>
+            <td>$111</td>
+            <td>$1,000-2,000</td>
+            <td>$1,111-2,111/month</td>
+        </tr>
+        <tr>
+            <td>Growth + Part-time Dev</td>
+            <td>$196</td>
+            <td>$3,000-5,000</td>
+            <td>$3,196-5,196/month</td>
+        </tr>
+        <tr>
+            <td>Growth + Full-time Dev</td>
+            <td>$196</td>
+            <td>$4,000-8,000</td>
+            <td>$4,196-8,196/month</td>
+        </tr>
+        <tr class="total-row">
+            <td><strong>Scaling (10K+ users)</strong></td>
+            <td>$300-500</td>
+            <td>$8,000-15,000</td>
+            <td><strong>$8,300-15,500/month</strong></td>
+        </tr>
+    </table>
+
+    <div class="recommendation">
+        <strong>Key Insight:</strong> Initial development value: <strong>$16,500-$48,000</strong>. By using AI-assisted development, you've saved significant upfront costs. Monthly runway at bootstrap level is only ~$21/month, making it sustainable to test and iterate before committing to larger expenses.
+    </div>
+
+    <div class="page-break"></div>
+
+    <h2>Steps to Production</h2>
+
+    <h3>Phase 1: Pre-Launch Checklist (1-2 days)</h3>
+    <ul class="checklist">
+        <li>Run database migrations - Execute <code>supabase-new-features.sql</code> in Supabase</li>
+        <li>Set up proper stock API - Replace Yahoo Finance with reliable provider</li>
+        <li>Configure email service - Set up Resend/SendGrid for password reset</li>
+        <li>Purchase domain - Buy and configure DNS</li>
+        <li>Set environment variables for Production in Vercel</li>
+        <li>Remove debug logging from API routes</li>
+    </ul>
+
+    <h3>Phase 2: Security Hardening (1-2 days)</h3>
+    <ul class="checklist">
+        <li>Upgrade password hashing - Replace SHA-256 with bcrypt/argon2</li>
+        <li>Add rate limiting - Prevent API abuse</li>
+        <li>Set up CORS properly - Restrict origins</li>
+        <li>Add input sanitization - Prevent XSS/injection</li>
+        <li>Enable Supabase Row Level Security (RLS)</li>
+        <li>Set up SSL (automatic with Vercel)</li>
+    </ul>
+
+    <h3>Phase 3: Production Deployment (1 day)</h3>
+    <ul class="checklist">
+        <li>Merge to main branch - Deploy to Production environment</li>
+        <li>Configure custom domain in Vercel</li>
+        <li>Set up DNS records (A, CNAME)</li>
+        <li>Verify SSL certificate is active</li>
+        <li>Test all critical flows (register, login, create portfolio, challenges)</li>
+    </ul>
+
+    <h3>Phase 4: Monitoring & Analytics (1 day)</h3>
+    <ul class="checklist">
+        <li>Set up error tracking (Sentry)</li>
+        <li>Configure uptime monitoring (Uptime Robot)</li>
+        <li>Add analytics (PostHog, Vercel Analytics)</li>
+        <li>Set up alerts for errors and downtime</li>
+    </ul>
+
+    <h3>Phase 5: Legal & Compliance</h3>
+    <ul class="checklist">
+        <li>Add Terms of Service page</li>
+        <li>Add Privacy Policy page</li>
+        <li>Add disclaimer - "Not financial advice, paper trading only"</li>
+        <li>Cookie consent banner (if required in your region)</li>
+    </ul>
+
+    <h2>Quick Start Commands</h2>
+    <div class="code-block">
+<span class="comment"># 1. Merge to main for production deployment</span>
+git checkout main
+git merge feature/learning
+git push origin main
+
+<span class="comment"># 2. Set production environment variables in Vercel</span>
+vercel env add NEXT_PUBLIC_SUPABASE_URL production
+vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
+vercel env add RESEND_API_KEY production
+
+<span class="comment"># 3. Deploy to production</span>
+vercel --prod
+
+<span class="comment"># 4. Add custom domain</span>
+vercel domains add yourdomain.com
+    </div>
+
+    <h2>Immediate Next Steps</h2>
+    <div class="section-box">
+        <ol style="padding-left: 20px;">
+            <li style="margin-bottom: 10px;"><strong>Run the SQL migrations</strong> in Supabase SQL Editor</li>
+            <li style="margin-bottom: 10px;"><strong>Test registration and login</strong> (should work now with env vars fixed)</li>
+            <li style="margin-bottom: 10px;"><strong>Purchase a domain</strong> when ready to launch</li>
+            <li style="margin-bottom: 10px;"><strong>Set up email service</strong> for password reset to work properly</li>
+        </ol>
+    </div>
+
+    <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; text-align: center; color: #64748b; font-size: 12px;">
+        <p>GameFi Invest - Production Deployment Guide</p>
+        <p>Generated by Claude Code</p>
+    </div>
+</body>
+</html>

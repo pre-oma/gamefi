@@ -4,11 +4,13 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useStore } from '@/store/useStore';
 import { AppLayout, Button, Input, Modal } from '@/components';
+import { useTheme } from '@/components/ThemeProvider';
 import { cn, copyToClipboard } from '@/lib/utils';
 import { ThemeMode } from '@/types';
 
 export default function SettingsPage() {
   const { currentUser, updateProfile, logout } = useStore();
+  const { theme, setTheme, resolvedTheme } = useTheme();
 
   // Account settings
   const [currentPassword, setCurrentPassword] = useState('');
@@ -19,7 +21,6 @@ export default function SettingsPage() {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // Preferences
-  const [theme, setTheme] = useState<ThemeMode>('dark');
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [priceAlertNotifications, setPriceAlertNotifications] = useState(true);
@@ -165,8 +166,13 @@ export default function SettingsPage() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <h1 className="text-3xl font-bold text-white mb-2">Settings</h1>
-          <p className="text-slate-400">Manage your account settings and preferences</p>
+          <h1 className={cn(
+            'text-3xl font-bold mb-2',
+            resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900'
+          )}>Settings</h1>
+          <p className={resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600'}>
+            Manage your account settings and preferences
+          </p>
         </motion.div>
 
         {/* Account Settings */}
@@ -174,19 +180,37 @@ export default function SettingsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 mb-6"
+          className={cn(
+            'rounded-2xl p-6 mb-6 border',
+            resolvedTheme === 'dark'
+              ? 'bg-slate-900/50 border-slate-800'
+              : 'bg-white/80 border-slate-200'
+          )}
         >
-          <h2 className="text-lg font-semibold text-white mb-4">Account Information</h2>
+          <h2 className={cn(
+            'text-lg font-semibold mb-4',
+            resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900'
+          )}>Account Information</h2>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Username</label>
-              <p className="text-white">@{currentUser?.username}</p>
+              <label className={cn(
+                'block text-sm font-medium mb-1',
+                resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+              )}>Username</label>
+              <p className={resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900'}>
+                @{currentUser?.username}
+              </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Email</label>
-              <p className="text-white">{currentUser?.email}</p>
+              <label className={cn(
+                'block text-sm font-medium mb-1',
+                resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+              )}>Email</label>
+              <p className={resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900'}>
+                {currentUser?.email}
+              </p>
             </div>
           </div>
         </motion.div>
@@ -196,9 +220,17 @@ export default function SettingsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 mb-6"
+          className={cn(
+            'rounded-2xl p-6 mb-6 border',
+            resolvedTheme === 'dark'
+              ? 'bg-slate-900/50 border-slate-800'
+              : 'bg-white/80 border-slate-200'
+          )}
         >
-          <h2 className="text-lg font-semibold text-white mb-4">Change Password</h2>
+          <h2 className={cn(
+            'text-lg font-semibold mb-4',
+            resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900'
+          )}>Change Password</h2>
 
           {passwordError && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
@@ -248,21 +280,37 @@ export default function SettingsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 mb-6"
+          className={cn(
+            'rounded-2xl p-6 mb-6 border',
+            resolvedTheme === 'dark'
+              ? 'bg-slate-900/50 border-slate-800'
+              : 'bg-white/80 border-slate-200'
+          )}
         >
-          <h2 className="text-lg font-semibold text-white mb-4">Notifications</h2>
+          <h2 className={cn(
+            'text-lg font-semibold mb-4',
+            resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900'
+          )}>Notifications</h2>
 
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white font-medium">Email Notifications</p>
-                <p className="text-sm text-slate-400">Receive updates via email</p>
+                <p className={cn(
+                  'font-medium',
+                  resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900'
+                )}>Email Notifications</p>
+                <p className={cn(
+                  'text-sm',
+                  resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+                )}>Receive updates via email</p>
               </div>
               <button
                 onClick={() => setEmailNotifications(!emailNotifications)}
                 className={cn(
                   'relative w-12 h-6 rounded-full transition-colors',
-                  emailNotifications ? 'bg-emerald-500' : 'bg-slate-700'
+                  emailNotifications
+                    ? 'bg-emerald-500'
+                    : resolvedTheme === 'dark' ? 'bg-slate-700' : 'bg-slate-300'
                 )}
               >
                 <span
@@ -276,14 +324,22 @@ export default function SettingsPage() {
 
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white font-medium">Push Notifications</p>
-                <p className="text-sm text-slate-400">Receive push notifications</p>
+                <p className={cn(
+                  'font-medium',
+                  resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900'
+                )}>Push Notifications</p>
+                <p className={cn(
+                  'text-sm',
+                  resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+                )}>Receive push notifications</p>
               </div>
               <button
                 onClick={() => setPushNotifications(!pushNotifications)}
                 className={cn(
                   'relative w-12 h-6 rounded-full transition-colors',
-                  pushNotifications ? 'bg-emerald-500' : 'bg-slate-700'
+                  pushNotifications
+                    ? 'bg-emerald-500'
+                    : resolvedTheme === 'dark' ? 'bg-slate-700' : 'bg-slate-300'
                 )}
               >
                 <span
@@ -297,14 +353,22 @@ export default function SettingsPage() {
 
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-white font-medium">Price Alerts</p>
-                <p className="text-sm text-slate-400">Get notified when price targets are hit</p>
+                <p className={cn(
+                  'font-medium',
+                  resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900'
+                )}>Price Alerts</p>
+                <p className={cn(
+                  'text-sm',
+                  resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+                )}>Get notified when price targets are hit</p>
               </div>
               <button
                 onClick={() => setPriceAlertNotifications(!priceAlertNotifications)}
                 className={cn(
                   'relative w-12 h-6 rounded-full transition-colors',
-                  priceAlertNotifications ? 'bg-emerald-500' : 'bg-slate-700'
+                  priceAlertNotifications
+                    ? 'bg-emerald-500'
+                    : resolvedTheme === 'dark' ? 'bg-slate-700' : 'bg-slate-300'
                 )}
               >
                 <span
@@ -327,17 +391,39 @@ export default function SettingsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 mb-6"
+          className={cn(
+            'rounded-2xl p-6 mb-6 border',
+            resolvedTheme === 'dark'
+              ? 'bg-slate-900/50 border-slate-800'
+              : 'bg-white/80 border-slate-200'
+          )}
         >
-          <h2 className="text-lg font-semibold text-white mb-2">Referral Program</h2>
-          <p className="text-sm text-slate-400 mb-4">
+          <h2 className={cn(
+            'text-lg font-semibold mb-2',
+            resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900'
+          )}>Referral Program</h2>
+          <p className={cn(
+            'text-sm mb-4',
+            resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+          )}>
             Invite friends and earn 100 XP for each successful referral!
           </p>
 
-          <div className="bg-slate-800/50 rounded-lg p-4 mb-4">
-            <label className="block text-sm font-medium text-slate-400 mb-2">Your Referral Code</label>
+          <div className={cn(
+            'rounded-lg p-4 mb-4',
+            resolvedTheme === 'dark' ? 'bg-slate-800/50' : 'bg-slate-100'
+          )}>
+            <label className={cn(
+              'block text-sm font-medium mb-2',
+              resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+            )}>Your Referral Code</label>
             <div className="flex items-center gap-2">
-              <code className="flex-1 px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-emerald-400 font-mono">
+              <code className={cn(
+                'flex-1 px-4 py-2 rounded-lg text-emerald-500 font-mono border',
+                resolvedTheme === 'dark'
+                  ? 'bg-slate-900 border-slate-700'
+                  : 'bg-white border-slate-300'
+              )}>
                 {referralCode}
               </code>
               <Button
@@ -363,9 +449,24 @@ export default function SettingsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
-          className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 mb-6"
+          className={cn(
+            'rounded-2xl p-6 mb-6 border',
+            resolvedTheme === 'dark'
+              ? 'bg-slate-900/50 border-slate-800'
+              : 'bg-white/80 border-slate-200'
+          )}
         >
-          <h2 className="text-lg font-semibold text-white mb-4">Appearance</h2>
+          <h2 className={cn(
+            'text-lg font-semibold mb-4',
+            resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900'
+          )}>Appearance</h2>
+
+          <p className={cn(
+            'text-sm mb-4',
+            resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+          )}>
+            Choose your preferred theme. Current: <span className="font-medium text-emerald-500">{resolvedTheme}</span>
+          </p>
 
           <div className="grid grid-cols-3 gap-3">
             {(['dark', 'light', 'system'] as ThemeMode[]).map((mode) => (
@@ -376,13 +477,18 @@ export default function SettingsPage() {
                   'p-4 rounded-xl border-2 transition-all',
                   theme === mode
                     ? 'border-emerald-500 bg-emerald-500/10'
-                    : 'border-slate-700 bg-slate-800/50 hover:border-slate-600'
+                    : resolvedTheme === 'dark'
+                      ? 'border-slate-700 bg-slate-800/50 hover:border-slate-600'
+                      : 'border-slate-200 bg-slate-100/50 hover:border-slate-300'
                 )}
               >
                 <div className="text-2xl mb-2">
                   {mode === 'dark' ? '🌙' : mode === 'light' ? '☀️' : '💻'}
                 </div>
-                <p className="text-sm text-white capitalize">{mode}</p>
+                <p className={cn(
+                  'text-sm capitalize',
+                  resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900'
+                )}>{mode}</p>
               </button>
             ))}
           </div>
@@ -419,14 +525,22 @@ export default function SettingsPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
+            <label className={cn(
+              'block text-sm font-medium mb-2',
+              resolvedTheme === 'dark' ? 'text-slate-300' : 'text-slate-700'
+            )}>
               Type <span className="font-mono text-red-400">DELETE</span> to confirm
             </label>
             <input
               type="text"
               value={deleteConfirmation}
               onChange={(e) => setDeleteConfirmation(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none"
+              className={cn(
+                'w-full px-4 py-3 rounded-lg focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none border',
+                resolvedTheme === 'dark'
+                  ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500'
+                  : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
+              )}
               placeholder="DELETE"
             />
           </div>

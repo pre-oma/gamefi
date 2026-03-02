@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/store/useStore';
+import { useTheme } from '@/components/ThemeProvider';
 import { cn, calculateLevel } from '@/lib/utils';
 
 interface TopBarProps {
@@ -13,6 +14,7 @@ interface TopBarProps {
 
 export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
   const { currentUser, logout, notifications } = useStore();
+  const { resolvedTheme } = useTheme();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
@@ -22,7 +24,10 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed })
   return (
     <header
       className={cn(
-        'fixed top-0 right-0 z-30 h-16 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 transition-all duration-300',
+        'fixed top-0 right-0 z-30 h-16 backdrop-blur-md border-b transition-all duration-300',
+        resolvedTheme === 'dark'
+          ? 'bg-slate-900/95 border-slate-800'
+          : 'bg-white/95 border-slate-200',
         'left-0 lg:left-64',
         sidebarCollapsed && 'lg:left-[72px]'
       )}
@@ -31,7 +36,12 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed })
         {/* Mobile Menu Button */}
         <button
           onClick={onMenuClick}
-          className="lg:hidden p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+          className={cn(
+            'lg:hidden p-2 rounded-lg transition-colors',
+            resolvedTheme === 'dark'
+              ? 'text-slate-400 hover:text-white hover:bg-slate-800'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+          )}
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -45,15 +55,24 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed })
         <div className="flex items-center gap-3">
           {/* XP Badge */}
           {levelInfo && (
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-800 rounded-full">
-              <span className="text-emerald-400 font-bold text-sm">Lv.{levelInfo.level}</span>
-              <div className="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+            <div className={cn(
+              'hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full',
+              resolvedTheme === 'dark' ? 'bg-slate-800' : 'bg-slate-200'
+            )}>
+              <span className="text-emerald-500 font-bold text-sm">Lv.{levelInfo.level}</span>
+              <div className={cn(
+                'w-16 h-1.5 rounded-full overflow-hidden',
+                resolvedTheme === 'dark' ? 'bg-slate-700' : 'bg-slate-300'
+              )}>
                 <div
                   className="h-full bg-gradient-to-r from-emerald-400 to-teal-400 rounded-full"
                   style={{ width: `${(levelInfo.currentXp / levelInfo.nextLevelXp) * 100}%` }}
                 />
               </div>
-              <span className="text-xs text-slate-400">{currentUser?.xp} XP</span>
+              <span className={cn(
+                'text-xs',
+                resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+              )}>{currentUser?.xp} XP</span>
             </div>
           )}
 
@@ -61,7 +80,12 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed })
           <div className="relative">
             <button
               onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+              className={cn(
+                'relative p-2 rounded-lg transition-colors',
+                resolvedTheme === 'dark'
+                  ? 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+              )}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
@@ -84,10 +108,21 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed })
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 10 }}
-                    className="absolute right-0 mt-2 w-80 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden z-50"
+                    className={cn(
+                      'absolute right-0 mt-2 w-80 rounded-xl shadow-2xl overflow-hidden z-50 border',
+                      resolvedTheme === 'dark'
+                        ? 'bg-slate-900 border-slate-800'
+                        : 'bg-white border-slate-200'
+                    )}
                   >
-                    <div className="p-4 border-b border-slate-800">
-                      <h3 className="font-semibold text-white">Notifications</h3>
+                    <div className={cn(
+                      'p-4 border-b',
+                      resolvedTheme === 'dark' ? 'border-slate-800' : 'border-slate-200'
+                    )}>
+                      <h3 className={cn(
+                        'font-semibold',
+                        resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900'
+                      )}>Notifications</h3>
                     </div>
                     <div className="max-h-80 overflow-y-auto">
                       {notifications.length === 0 ? (
@@ -97,11 +132,17 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed })
                           <div
                             key={notif.id}
                             className={cn(
-                              'p-4 border-b border-slate-800 last:border-0 hover:bg-slate-800/50 transition-colors',
+                              'p-4 border-b last:border-0 transition-colors',
+                              resolvedTheme === 'dark'
+                                ? 'border-slate-800 hover:bg-slate-800/50'
+                                : 'border-slate-100 hover:bg-slate-50',
                               !notif.read && 'bg-emerald-500/5'
                             )}
                           >
-                            <p className="text-sm text-slate-300">{notif.message}</p>
+                            <p className={cn(
+                              'text-sm',
+                              resolvedTheme === 'dark' ? 'text-slate-300' : 'text-slate-700'
+                            )}>{notif.message}</p>
                             <p className="text-xs text-slate-500 mt-1">{new Date(notif.createdAt).toLocaleDateString()}</p>
                           </div>
                         ))
@@ -117,17 +158,26 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed })
           <div className="relative">
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
-              className="flex items-center gap-2 p-1.5 hover:bg-slate-800 rounded-lg transition-colors"
+              className={cn(
+                'flex items-center gap-2 p-1.5 rounded-lg transition-colors',
+                resolvedTheme === 'dark' ? 'hover:bg-slate-800' : 'hover:bg-slate-200'
+              )}
             >
               <img
                 src={currentUser?.avatar}
                 alt={currentUser?.username}
                 className="w-8 h-8 rounded-full ring-2 ring-emerald-500/30"
               />
-              <span className="hidden sm:block text-sm font-medium text-white max-w-[100px] truncate">
+              <span className={cn(
+                'hidden sm:block text-sm font-medium max-w-[100px] truncate',
+                resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900'
+              )}>
                 {currentUser?.displayName}
               </span>
-              <svg className="w-4 h-4 text-slate-400 hidden sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={cn(
+                'w-4 h-4 hidden sm:block',
+                resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+              )} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </button>
@@ -143,16 +193,35 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed })
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 10 }}
-                    className="absolute right-0 mt-2 w-56 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden z-50"
+                    className={cn(
+                      'absolute right-0 mt-2 w-56 rounded-xl shadow-2xl overflow-hidden z-50 border',
+                      resolvedTheme === 'dark'
+                        ? 'bg-slate-900 border-slate-800'
+                        : 'bg-white border-slate-200'
+                    )}
                   >
-                    <div className="p-4 border-b border-slate-800">
-                      <p className="font-semibold text-white">{currentUser?.displayName}</p>
-                      <p className="text-sm text-slate-400">@{currentUser?.username}</p>
+                    <div className={cn(
+                      'p-4 border-b',
+                      resolvedTheme === 'dark' ? 'border-slate-800' : 'border-slate-200'
+                    )}>
+                      <p className={cn(
+                        'font-semibold',
+                        resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900'
+                      )}>{currentUser?.displayName}</p>
+                      <p className={cn(
+                        'text-sm',
+                        resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+                      )}>@{currentUser?.username}</p>
                     </div>
                     <div className="p-2">
                       <Link
                         href="/profile"
-                        className="flex items-center gap-2 px-3 py-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                        className={cn(
+                          'flex items-center gap-2 px-3 py-2 rounded-lg transition-colors',
+                          resolvedTheme === 'dark'
+                            ? 'text-slate-300 hover:text-white hover:bg-slate-800'
+                            : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
+                        )}
                         onClick={() => setShowUserMenu(false)}
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -162,7 +231,12 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed })
                       </Link>
                       <Link
                         href="/settings"
-                        className="flex items-center gap-2 px-3 py-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                        className={cn(
+                          'flex items-center gap-2 px-3 py-2 rounded-lg transition-colors',
+                          resolvedTheme === 'dark'
+                            ? 'text-slate-300 hover:text-white hover:bg-slate-800'
+                            : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
+                        )}
                         onClick={() => setShowUserMenu(false)}
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
