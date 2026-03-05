@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 
 export default function ExplorePage() {
   const { resolvedTheme } = useTheme();
-  const { publicPortfolios, refreshPortfolios } = useStore();
+  const { publicPortfolios, refreshPortfolios, currentUser } = useStore();
   const [search, setSearch] = useState('');
   const [selectedFormation, setSelectedFormation] = useState<Formation | 'All'>('All');
   const [sortBy, setSortBy] = useState<'recent' | 'popular' | 'cloned'>('popular');
@@ -20,7 +20,8 @@ export default function ExplorePage() {
   }, [refreshPortfolios]);
 
   const filteredPortfolios = useMemo(() => {
-    let portfolios = [...publicPortfolios];
+    // Filter out current user's portfolios - only show other people's teams
+    let portfolios = publicPortfolios.filter(p => p.userId !== currentUser?.id);
 
     if (search) {
       const lowerSearch = search.toLowerCase();
@@ -48,7 +49,7 @@ export default function ExplorePage() {
     }
 
     return portfolios;
-  }, [publicPortfolios, search, selectedFormation, sortBy]);
+  }, [publicPortfolios, currentUser?.id, search, selectedFormation, sortBy]);
 
   return (
     <AppLayout>

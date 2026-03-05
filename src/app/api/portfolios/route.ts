@@ -194,6 +194,79 @@ export async function PUT(request: NextRequest) {
   }
 }
 
+// PATCH - Toggle like on a portfolio
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { portfolioId, userId, action } = body;
+
+    if (!portfolioId || !userId) {
+      return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
+    }
+
+    if (action === 'like') {
+      // Check if already liked
+      const { data: existingLike } = await supabase
+        .from('portfolio_likes')
+        .select('*')
+        .eq('portfolio_id', portfolioId)
+        .eq('user_id', userId)
+        .single();
+
+      if (existingLike) {
+        // Unlike - remove the like
+        await supabase
+          .from('portfolio_likes')
+          .delete()
+          .eq('portfolio_id', portfolioId)
+          .eq('user_id', userId);
+      } else {
+        // Like - add the like
+        await supabase
+          .from('portfolio_likes')
+          .insert({
+            portfolio_id: portfolioId,
+            user_id: userId,
+            created_at: new Date().toISOString(),
+          });
+      }
+
+      // Get updated likes count
+      const { data: likes } = await supabase
+        .from('portfolio_likes')
+        .select('user_id')
+        .eq('portfolio_id', portfolioId);
+
+      return NextResponse.json({
+        success: true,
+        likes: likes?.map(l => l.user_id) || [],
+        liked: !existingLike
+      });
+    }
+
+    if (action === 'clone') {
+      // Increment clone count
+      const { data: portfolio } = await supabase
+        .from('portfolios')
+        .select('clone_count')
+        .eq('id', portfolioId)
+        .single();
+
+      await supabase
+        .from('portfolios')
+        .update({ clone_count: (portfolio?.clone_count || 0) + 1 })
+        .eq('id', portfolioId);
+
+      return NextResponse.json({ success: true });
+    }
+
+    return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
+  } catch (error) {
+    console.error('Portfolio action error:', error);
+    return NextResponse.json({ success: false, error: 'Failed to perform action' }, { status: 500 });
+  }
+}
+
 // DELETE - Delete a portfolio
 export async function DELETE(request: NextRequest) {
   try {

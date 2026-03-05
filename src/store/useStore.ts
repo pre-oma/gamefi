@@ -69,7 +69,7 @@ interface AppState {
   deletePortfolio: (id: string) => Promise<void>;
   assignAssetToPosition: (portfolioId: string, positionId: string, asset: Asset | null) => Promise<void>;
   updatePlayerWeights: (portfolioId: string, weights: { positionId: string; allocation: number }[]) => Promise<void>;
-  likePortfolio: (portfolioId: string) => void;
+  likePortfolio: (portfolioId: string) => Promise<void>;
   clonePortfolio: (portfolioId: string) => Promise<Portfolio | null>;
   canCreateTeam: () => boolean;
   getTeamSlotInfo: () => { current: number; max: number; canUnlock: boolean; unlockCost: number };
@@ -394,11 +394,13 @@ export const useStore = create<AppState>((set, get) => ({
     await get().updatePortfolio(portfolioId, { players: updatedPlayers });
   },
 
-  likePortfolio: (portfolioId: string) => {
+  likePortfolio: async (portfolioId: string) => {
     const { currentUser } = get();
     if (!currentUser) return;
 
-    const portfolio = get().portfolios.find((p) => p.id === portfolioId);
+    // Find portfolio in either user's portfolios or public portfolios
+    const portfolio = get().portfolios.find((p) => p.id === portfolioId) ||
+                     get().publicPortfolios.find((p) => p.id === portfolioId);
     if (!portfolio) return;
 
     const hasLiked = portfolio.likes.includes(currentUser.id);
@@ -406,12 +408,30 @@ export const useStore = create<AppState>((set, get) => ({
       ? portfolio.likes.filter((id) => id !== currentUser.id)
       : [...portfolio.likes, currentUser.id];
 
-    // Update locally for now (would need API endpoint for likes)
+    // Optimistically update locally
     set({
       portfolios: get().portfolios.map((p) =>
         p.id === portfolioId ? { ...p, likes: updatedLikes } : p
       ),
+      publicPortfolios: get().publicPortfolios.map((p) =>
+        p.id === portfolioId ? { ...p, likes: updatedLikes } : p
+      ),
     });
+
+    // Persist to database
+    try {
+      await fetch('/api/portfolios', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          portfolioId,
+          userId: currentUser.id,
+          action: 'like',
+        }),
+      });
+    } catch (error) {
+      console.error('Failed to persist like:', error);
+    }
   },
 
   clonePortfolio: async (portfolioId: string) => {
@@ -441,6 +461,24 @@ export const useStore = create<AppState>((set, get) => ({
     if (!result.success) return null;
 
     const cloned = result.portfolio;
+
+    // Increment clone count on original portfolio
+    await fetch('/api/portfolios', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        portfolioId: portfolioId,
+        userId: currentUser.id,
+        action: 'clone',
+      }),
+    });
+
+    // Update clone count locally
+    set({
+      publicPortfolios: get().publicPortfolios.map((p) =>
+        p.id === portfolioId ? { ...p, cloneCount: p.cloneCount + 1 } : p
+      ),
+    });
 
     const updatedUser = {
       ...currentUser,

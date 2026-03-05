@@ -35,6 +35,7 @@ import {
   formatRatio,
 } from '@/lib/utils';
 import { usePortfolioFundamentals } from '@/hooks/usePortfolioFundamentals';
+import { useTheme } from '@/components/ThemeProvider';
 
 const CHART_COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#6b7280'];
 
@@ -49,6 +50,7 @@ export default function PortfolioDetailPage() {
   const router = useRouter();
   const params = useParams();
   const portfolioId = params.id as string;
+  const { resolvedTheme } = useTheme();
 
   const { currentUser, isAuthenticated, loadData, assignAssetToPosition, updatePlayerWeights, likePortfolio, clonePortfolio, deletePortfolio } = useStore();
 
@@ -229,12 +231,12 @@ export default function PortfolioDetailPage() {
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
             <div>
               <div className="flex items-center gap-3 mb-2">
-                <h1 className="text-3xl font-bold text-white">{portfolio.name}</h1>
+                <h1 className={cn('text-3xl font-bold', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{portfolio.name}</h1>
                 <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 text-sm font-medium rounded-full">
                   {portfolio.formation}
                 </span>
               </div>
-              <p className="text-slate-400">{portfolio.description || 'No description'}</p>
+              <p className={cn(resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>{portfolio.description || 'No description'}</p>
               {owner && (
                 <div className="flex items-center gap-2 mt-3">
                   <img src={owner.avatar} alt="" className="w-6 h-6 rounded-full" />
@@ -250,7 +252,11 @@ export default function PortfolioDetailPage() {
                 onClick={handleLike}
                 className={cn(
                   'flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors',
-                  hasLiked ? 'bg-pink-500/20 text-pink-400' : 'bg-slate-800 text-slate-400 hover:text-pink-400'
+                  hasLiked
+                    ? 'bg-pink-500/20 text-pink-400'
+                    : resolvedTheme === 'dark'
+                      ? 'bg-slate-800 text-slate-400 hover:text-pink-400'
+                      : 'bg-slate-100 text-slate-600 hover:text-pink-400'
                 )}
               >
                 <svg
@@ -328,17 +334,26 @@ export default function PortfolioDetailPage() {
             transition={{ delay: 0.1 }}
             className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-8"
           >
-            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+            <div className={cn(
+              'rounded-xl p-4 border',
+              resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+            )}>
               <p className="text-xs text-slate-500 mb-1">Total Value</p>
-              <p className="text-lg font-bold text-white">{formatCurrency(performance.totalValue)}</p>
+              <p className={cn('text-lg font-bold', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{formatCurrency(performance.totalValue)}</p>
             </div>
-            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+            <div className={cn(
+              'rounded-xl p-4 border',
+              resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+            )}>
               <p className="text-xs text-slate-500 mb-1">Total Return</p>
               <p className={cn('text-lg font-bold', performance.totalReturnPercent >= 0 ? 'text-emerald-400' : 'text-red-400')}>
                 {formatPercent(performance.totalReturnPercent)}
               </p>
             </div>
-            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+            <div className={cn(
+              'rounded-xl p-4 border',
+              resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+            )}>
               <div className="flex items-center justify-between mb-1">
                 <p className="text-xs text-slate-500">Day Return</p>
                 {/* Trend indicator */}
@@ -361,7 +376,10 @@ export default function PortfolioDetailPage() {
               </p>
               <p className="text-xs text-slate-500 mt-1">vs yesterday</p>
             </div>
-            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+            <div className={cn(
+              'rounded-xl p-4 border',
+              resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+            )}>
               <div className="flex items-center justify-between mb-1">
                 <p className="text-xs text-slate-500">Week Return</p>
                 {/* Trend indicator */}
@@ -384,11 +402,17 @@ export default function PortfolioDetailPage() {
               </p>
               <p className="text-xs text-slate-500 mt-1">vs last week</p>
             </div>
-            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+            <div className={cn(
+              'rounded-xl p-4 border',
+              resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+            )}>
               <p className="text-xs text-slate-500 mb-1">Beta</p>
-              <p className="text-lg font-bold text-white">{performance.beta.toFixed(2)}</p>
+              <p className={cn('text-lg font-bold', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{performance.beta.toFixed(2)}</p>
             </div>
-            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+            <div className={cn(
+              'rounded-xl p-4 border',
+              resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+            )}>
               <div className="flex items-center justify-between mb-1">
                 <p className="text-xs text-slate-500">Trend</p>
                 <div className={cn(
@@ -398,7 +422,7 @@ export default function PortfolioDetailPage() {
                   {performance.isImproving ? 'Improving' : 'Declining'}
                 </div>
               </div>
-              <p className="text-lg font-bold text-white">{filledPositions}/11</p>
+              <p className={cn('text-lg font-bold', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{filledPositions}/11</p>
               <p className="text-xs text-slate-500 mt-1">players filled</p>
             </div>
           </motion.div>
@@ -412,13 +436,16 @@ export default function PortfolioDetailPage() {
             transition={{ delay: 0.15 }}
             className="mb-8"
           >
-            <h3 className="text-sm font-medium text-slate-400 mb-3">Fundamental Metrics</h3>
+            <h3 className={cn('text-sm font-medium mb-3', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>Fundamental Metrics</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
               {/* Alpha */}
-              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
+              <div className={cn(
+                'rounded-xl p-3 border',
+                resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+              )}>
                 <p className="text-xs text-slate-500 mb-1">Alpha</p>
                 {fundamentalsLoading ? (
-                  <div className="w-12 h-5 bg-slate-700 animate-pulse rounded" />
+                  <div className={cn('w-12 h-5 animate-pulse rounded', resolvedTheme === 'dark' ? 'bg-slate-700' : 'bg-slate-200')} />
                 ) : (
                   <p className={cn(
                     'text-sm font-bold',
@@ -427,48 +454,60 @@ export default function PortfolioDetailPage() {
                     {alpha !== null ? `${alpha >= 0 ? '+' : ''}${alpha.toFixed(2)}%` : 'N/A'}
                   </p>
                 )}
-                <p className="text-xs text-slate-600 mt-0.5">vs SPY</p>
+                <p className="text-xs text-slate-500 mt-0.5">vs SPY</p>
               </div>
 
               {/* Weighted P/E */}
-              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
+              <div className={cn(
+                'rounded-xl p-3 border',
+                resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+              )}>
                 <p className="text-xs text-slate-500 mb-1">Avg P/E</p>
                 {fundamentalsLoading ? (
-                  <div className="w-12 h-5 bg-slate-700 animate-pulse rounded" />
+                  <div className={cn('w-12 h-5 animate-pulse rounded', resolvedTheme === 'dark' ? 'bg-slate-700' : 'bg-slate-200')} />
                 ) : (
-                  <p className="text-sm font-bold text-white">{formatPE(aggregateMetrics.weightedPE)}</p>
+                  <p className={cn('text-sm font-bold', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{formatPE(aggregateMetrics.weightedPE)}</p>
                 )}
               </div>
 
               {/* Weighted EPS */}
-              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
+              <div className={cn(
+                'rounded-xl p-3 border',
+                resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+              )}>
                 <p className="text-xs text-slate-500 mb-1">Avg EPS</p>
                 {fundamentalsLoading ? (
-                  <div className="w-12 h-5 bg-slate-700 animate-pulse rounded" />
+                  <div className={cn('w-12 h-5 animate-pulse rounded', resolvedTheme === 'dark' ? 'bg-slate-700' : 'bg-slate-200')} />
                 ) : (
-                  <p className="text-sm font-bold text-white">{formatEPS(aggregateMetrics.weightedEPS)}</p>
+                  <p className={cn('text-sm font-bold', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{formatEPS(aggregateMetrics.weightedEPS)}</p>
                 )}
               </div>
 
               {/* Weighted PEG */}
-              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
+              <div className={cn(
+                'rounded-xl p-3 border',
+                resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+              )}>
                 <p className="text-xs text-slate-500 mb-1">Avg PEG</p>
                 {fundamentalsLoading ? (
-                  <div className="w-12 h-5 bg-slate-700 animate-pulse rounded" />
+                  <div className={cn('w-12 h-5 animate-pulse rounded', resolvedTheme === 'dark' ? 'bg-slate-700' : 'bg-slate-200')} />
                 ) : (
-                  <p className="text-sm font-bold text-white">{formatRatio(aggregateMetrics.weightedPEG)}</p>
+                  <p className={cn('text-sm font-bold', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{formatRatio(aggregateMetrics.weightedPEG)}</p>
                 )}
               </div>
 
               {/* Weighted ROE */}
-              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
+              <div className={cn(
+                'rounded-xl p-3 border',
+                resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+              )}>
                 <p className="text-xs text-slate-500 mb-1">Avg ROE</p>
                 {fundamentalsLoading ? (
-                  <div className="w-12 h-5 bg-slate-700 animate-pulse rounded" />
+                  <div className={cn('w-12 h-5 animate-pulse rounded', resolvedTheme === 'dark' ? 'bg-slate-700' : 'bg-slate-200')} />
                 ) : (
                   <p className={cn(
                     'text-sm font-bold',
-                    aggregateMetrics.weightedROE !== null && aggregateMetrics.weightedROE > 0 ? 'text-emerald-400' : 'text-white'
+                    aggregateMetrics.weightedROE !== null && aggregateMetrics.weightedROE > 0 ? 'text-emerald-400' : resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900'
                   )}>
                     {formatPercentMetric(aggregateMetrics.weightedROE)}
                   </p>
@@ -476,14 +515,17 @@ export default function PortfolioDetailPage() {
               </div>
 
               {/* Weighted Profit Margin */}
-              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
+              <div className={cn(
+                'rounded-xl p-3 border',
+                resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+              )}>
                 <p className="text-xs text-slate-500 mb-1">Avg Margin</p>
                 {fundamentalsLoading ? (
-                  <div className="w-12 h-5 bg-slate-700 animate-pulse rounded" />
+                  <div className={cn('w-12 h-5 animate-pulse rounded', resolvedTheme === 'dark' ? 'bg-slate-700' : 'bg-slate-200')} />
                 ) : (
                   <p className={cn(
                     'text-sm font-bold',
-                    aggregateMetrics.weightedProfitMargin !== null && aggregateMetrics.weightedProfitMargin > 0 ? 'text-emerald-400' : 'text-white'
+                    aggregateMetrics.weightedProfitMargin !== null && aggregateMetrics.weightedProfitMargin > 0 ? 'text-emerald-400' : resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900'
                   )}>
                     {formatPercentMetric(aggregateMetrics.weightedProfitMargin)}
                   </p>
@@ -491,24 +533,30 @@ export default function PortfolioDetailPage() {
               </div>
 
               {/* Weighted P/B */}
-              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
+              <div className={cn(
+                'rounded-xl p-3 border',
+                resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+              )}>
                 <p className="text-xs text-slate-500 mb-1">Avg P/B</p>
                 {fundamentalsLoading ? (
-                  <div className="w-12 h-5 bg-slate-700 animate-pulse rounded" />
+                  <div className={cn('w-12 h-5 animate-pulse rounded', resolvedTheme === 'dark' ? 'bg-slate-700' : 'bg-slate-200')} />
                 ) : (
-                  <p className="text-sm font-bold text-white">{formatRatio(aggregateMetrics.weightedPriceToBook)}</p>
+                  <p className={cn('text-sm font-bold', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{formatRatio(aggregateMetrics.weightedPriceToBook)}</p>
                 )}
               </div>
 
               {/* Weighted D/E */}
-              <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
+              <div className={cn(
+                'rounded-xl p-3 border',
+                resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+              )}>
                 <p className="text-xs text-slate-500 mb-1">Avg D/E</p>
                 {fundamentalsLoading ? (
-                  <div className="w-12 h-5 bg-slate-700 animate-pulse rounded" />
+                  <div className={cn('w-12 h-5 animate-pulse rounded', resolvedTheme === 'dark' ? 'bg-slate-700' : 'bg-slate-200')} />
                 ) : (
                   <p className={cn(
                     'text-sm font-bold',
-                    aggregateMetrics.weightedDebtToEquity !== null && aggregateMetrics.weightedDebtToEquity > 1.5 ? 'text-amber-400' : 'text-white'
+                    aggregateMetrics.weightedDebtToEquity !== null && aggregateMetrics.weightedDebtToEquity > 1.5 ? 'text-amber-400' : resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900'
                   )}>
                     {formatRatio(aggregateMetrics.weightedDebtToEquity)}
                   </p>
@@ -525,10 +573,13 @@ export default function PortfolioDetailPage() {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2 }}
-            className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6"
+            className={cn(
+              'rounded-2xl p-6 border',
+              resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+            )}
           >
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-white">Team Formation</h2>
+              <h2 className={cn('text-lg font-semibold', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>Team Formation</h2>
               {isOwner && filledPositions > 0 && (
                 <Button
                   variant="outline"
@@ -555,7 +606,7 @@ export default function PortfolioDetailPage() {
               isEditable={isOwner}
             />
             {isOwner && (
-              <p className="text-sm text-slate-500 text-center mt-4">
+              <p className={cn('text-sm text-center mt-4', resolvedTheme === 'dark' ? 'text-slate-500' : 'text-slate-500')}>
                 Click on a position to assign an asset
                 {filledPositions > 0 && ' | Use "Adjust Weights" to change allocations'}
               </p>
@@ -570,10 +621,13 @@ export default function PortfolioDetailPage() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.3 }}
-                className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6"
+                className={cn(
+                  'rounded-2xl p-6 border',
+                  resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+                )}
               >
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-                  <h2 className="text-lg font-semibold text-white">Performance History</h2>
+                  <h2 className={cn('text-lg font-semibold', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>Performance History</h2>
                 </div>
                 <div className="mb-4">
                   <DateRangePicker
@@ -625,9 +679,12 @@ export default function PortfolioDetailPage() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.4 }}
-                className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6"
+                className={cn(
+                  'rounded-2xl p-6 border',
+                  resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+                )}
               >
-                <h2 className="text-lg font-semibold text-white mb-4">Sector Allocation</h2>
+                <h2 className={cn('text-lg font-semibold mb-4', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>Sector Allocation</h2>
                 <div className="flex items-center gap-6">
                   <div className="w-40 h-40">
                     <ResponsiveContainer width="100%" height="100%">
@@ -652,8 +709,8 @@ export default function PortfolioDetailPage() {
                     {sectorData.map((sector, index) => (
                       <div key={index} className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full" style={{ backgroundColor: sector.color }} />
-                        <span className="text-sm text-slate-400">{sector.name}</span>
-                        <span className="text-sm font-medium text-white ml-auto">{sector.value}</span>
+                        <span className={cn('text-sm', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>{sector.name}</span>
+                        <span className={cn('text-sm font-medium ml-auto', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{sector.value}</span>
                       </div>
                     ))}
                   </div>
@@ -668,31 +725,40 @@ export default function PortfolioDetailPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
-          className="mt-8 bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden"
+          className={cn(
+            'mt-8 rounded-2xl overflow-hidden border',
+            resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+          )}
         >
-          <div className="px-6 py-4 border-b border-slate-800">
-            <h2 className="text-lg font-semibold text-white">Holdings</h2>
+          <div className={cn('px-6 py-4 border-b', resolvedTheme === 'dark' ? 'border-slate-800' : 'border-slate-200')}>
+            <h2 className={cn('text-lg font-semibold', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>Holdings</h2>
           </div>
-          <div className="divide-y divide-slate-800">
+          <div className={cn('divide-y', resolvedTheme === 'dark' ? 'divide-slate-800' : 'divide-slate-200')}>
             {portfolio.players.map((player) => {
               if (!player.asset) return null;
               return (
-                <div key={player.positionId} className="flex items-center gap-4 px-6 py-4 hover:bg-slate-800/30 transition-colors">
-                  <div className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center">
+                <div key={player.positionId} className={cn(
+                  'flex items-center gap-4 px-6 py-4 transition-colors',
+                  resolvedTheme === 'dark' ? 'hover:bg-slate-800/30' : 'hover:bg-slate-50'
+                )}>
+                  <div className={cn(
+                    'w-10 h-10 rounded-lg flex items-center justify-center',
+                    resolvedTheme === 'dark' ? 'bg-slate-800' : 'bg-slate-100'
+                  )}>
                     <span className="font-bold text-emerald-400">{player.asset.symbol.slice(0, 2)}</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-white">{player.asset.symbol}</p>
+                    <p className={cn('font-medium', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{player.asset.symbol}</p>
                     <p className="text-sm text-slate-500 truncate">{player.asset.name}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-medium text-white">{formatCurrency(player.asset.currentPrice)}</p>
+                    <p className={cn('font-medium', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{formatCurrency(player.asset.currentPrice)}</p>
                     <p className={cn('text-sm', player.asset.dayChangePercent >= 0 ? 'text-emerald-400' : 'text-red-400')}>
                       {formatPercent(player.asset.dayChangePercent)}
                     </p>
                   </div>
                   <div className="text-right text-sm">
-                    <p className="text-slate-400">{player.allocation.toFixed(1)}%</p>
+                    <p className={cn(resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>{player.allocation.toFixed(1)}%</p>
                   </div>
                 </div>
               );
