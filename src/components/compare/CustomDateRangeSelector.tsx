@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { CustomDateRange } from '@/types';
 import { cn } from '@/lib/utils';
+import { useTheme } from '@/components/ThemeProvider';
 
 interface CustomDateRangeSelectorProps {
   dateRange: CustomDateRange | null;
@@ -16,6 +17,7 @@ export const CustomDateRangeSelector: React.FC<CustomDateRangeSelectorProps> = (
   onDateRangeChange,
   disabled = false,
 }) => {
+  const { resolvedTheme } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const [startDate, setStartDate] = useState(dateRange?.startDate || '');
   const [endDate, setEndDate] = useState(dateRange?.endDate || '');
@@ -49,7 +51,9 @@ export const CustomDateRangeSelector: React.FC<CustomDateRangeSelectorProps> = (
           'flex items-center gap-2 px-3 py-2 text-sm rounded-lg border transition-colors',
           dateRange
             ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
-            : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600',
+            : resolvedTheme === 'dark'
+              ? 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'
+              : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300',
           disabled && 'opacity-50 cursor-not-allowed'
         )}
       >
@@ -67,34 +71,54 @@ export const CustomDateRangeSelector: React.FC<CustomDateRangeSelectorProps> = (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="absolute top-full mt-2 right-0 z-50 bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-xl min-w-[280px]"
+          className={cn(
+            'absolute top-full mt-2 right-0 z-50 rounded-xl p-4 shadow-xl min-w-[280px] border',
+            resolvedTheme === 'dark'
+              ? 'bg-slate-800 border-slate-700'
+              : 'bg-white border-slate-200'
+          )}
         >
           <div className="space-y-4">
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Start Date</label>
+              <label className={cn('block text-xs mb-1', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-500')}>Start Date</label>
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 max={endDate || undefined}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-emerald-500"
+                className={cn(
+                  'w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-emerald-500 border',
+                  resolvedTheme === 'dark'
+                    ? 'bg-slate-900 border-slate-700 text-white'
+                    : 'bg-slate-50 border-slate-200 text-slate-900'
+                )}
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">End Date</label>
+              <label className={cn('block text-xs mb-1', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-500')}>End Date</label>
               <input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 min={startDate || undefined}
                 max={new Date().toISOString().split('T')[0]}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-emerald-500"
+                className={cn(
+                  'w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-emerald-500 border',
+                  resolvedTheme === 'dark'
+                    ? 'bg-slate-900 border-slate-700 text-white'
+                    : 'bg-slate-50 border-slate-200 text-slate-900'
+                )}
               />
             </div>
             <div className="flex gap-2">
               <button
                 onClick={handleClear}
-                className="flex-1 px-3 py-2 text-sm text-slate-400 hover:text-white border border-slate-700 rounded-lg transition-colors"
+                className={cn(
+                  'flex-1 px-3 py-2 text-sm rounded-lg transition-colors border',
+                  resolvedTheme === 'dark'
+                    ? 'text-slate-400 hover:text-white border-slate-700'
+                    : 'text-slate-600 hover:text-slate-900 border-slate-200'
+                )}
               >
                 Clear
               </button>
@@ -105,7 +129,9 @@ export const CustomDateRangeSelector: React.FC<CustomDateRangeSelectorProps> = (
                   'flex-1 px-3 py-2 text-sm rounded-lg transition-colors',
                   startDate && endDate
                     ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-                    : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                    : resolvedTheme === 'dark'
+                      ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                      : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                 )}
               >
                 Apply
