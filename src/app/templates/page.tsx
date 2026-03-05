@@ -7,6 +7,7 @@ import { AppLayout } from '@/components';
 import { useStore } from '@/store/useStore';
 import { PORTFOLIO_TEMPLATES, TemplateCategory, RiskLevel, Formation } from '@/types';
 import { cn } from '@/lib/utils';
+import { useTheme } from '@/components/ThemeProvider';
 
 const CATEGORIES: { value: TemplateCategory | 'all'; label: string }[] = [
   { value: 'all', label: 'All Templates' },
@@ -31,6 +32,7 @@ const DIFFICULTY_COLORS = {
 
 export default function TemplatesPage() {
   const router = useRouter();
+  const { resolvedTheme } = useTheme();
   const { currentUser, createPortfolio, assignAssetToPosition } = useStore();
   const [selectedCategory, setSelectedCategory] = useState<TemplateCategory | 'all'>('all');
   const [creatingFromTemplate, setCreatingFromTemplate] = useState<string | null>(null);
@@ -79,8 +81,8 @@ export default function TemplatesPage() {
         animate={{ opacity: 1, y: 0 }}
         className="mb-8"
       >
-        <h1 className="text-3xl font-bold text-white mb-2">Portfolio Templates</h1>
-        <p className="text-slate-400">
+        <h1 className={cn('text-3xl font-bold mb-2', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>Portfolio Templates</h1>
+        <p className={cn(resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>
           Get started quickly with pre-built portfolio strategies. Clone a template and customize it to your liking.
         </p>
       </motion.div>
@@ -100,7 +102,9 @@ export default function TemplatesPage() {
               'px-4 py-2 rounded-lg font-medium transition-colors',
               selectedCategory === cat.value
                 ? 'bg-emerald-500 text-white'
-                : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                : resolvedTheme === 'dark'
+                  ? 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
             )}
           >
             {cat.label}
@@ -121,17 +125,25 @@ export default function TemplatesPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 * index }}
-            className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden hover:border-slate-700 transition-colors"
+            className={cn(
+              'rounded-2xl overflow-hidden transition-colors border',
+              resolvedTheme === 'dark'
+                ? 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+            )}
           >
             {/* Header */}
-            <div className="p-6 border-b border-slate-800">
+            <div className={cn('p-6 border-b', resolvedTheme === 'dark' ? 'border-slate-800' : 'border-slate-200')}>
               <div className="flex items-start justify-between mb-3">
-                <h3 className="text-lg font-bold text-white">{template.name}</h3>
-                <span className="px-2 py-1 bg-slate-800 rounded text-xs text-slate-400">
+                <h3 className={cn('text-lg font-bold', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{template.name}</h3>
+                <span className={cn(
+                  'px-2 py-1 rounded text-xs',
+                  resolvedTheme === 'dark' ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-600'
+                )}>
                   {template.formation}
                 </span>
               </div>
-              <p className="text-slate-400 text-sm mb-4">{template.description}</p>
+              <p className={cn('text-sm mb-4', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>{template.description}</p>
 
               {/* Badges */}
               <div className="flex flex-wrap gap-2">
@@ -157,19 +169,25 @@ export default function TemplatesPage() {
             </div>
 
             {/* Stocks Preview */}
-            <div className="p-4 bg-slate-800/30">
+            <div className={cn('p-4', resolvedTheme === 'dark' ? 'bg-slate-800/30' : 'bg-slate-50')}>
               <p className="text-xs text-slate-500 mb-2">Included Stocks</p>
               <div className="flex flex-wrap gap-1">
                 {template.stocks.slice(0, 6).map((stock) => (
                   <span
                     key={stock.positionId}
-                    className="px-2 py-1 bg-slate-800 rounded text-xs text-slate-300"
+                    className={cn(
+                      'px-2 py-1 rounded text-xs',
+                      resolvedTheme === 'dark' ? 'bg-slate-800 text-slate-300' : 'bg-white text-slate-700 border border-slate-200'
+                    )}
                   >
                     {stock.symbol}
                   </span>
                 ))}
                 {template.stocks.length > 6 && (
-                  <span className="px-2 py-1 bg-slate-800 rounded text-xs text-slate-500">
+                  <span className={cn(
+                    'px-2 py-1 rounded text-xs',
+                    resolvedTheme === 'dark' ? 'bg-slate-800 text-slate-500' : 'bg-white text-slate-500 border border-slate-200'
+                  )}>
                     +{template.stocks.length - 6} more
                   </span>
                 )}
@@ -177,7 +195,7 @@ export default function TemplatesPage() {
             </div>
 
             {/* Tags */}
-            <div className="px-6 py-3 border-t border-slate-800">
+            <div className={cn('px-6 py-3 border-t', resolvedTheme === 'dark' ? 'border-slate-800' : 'border-slate-200')}>
               <div className="flex flex-wrap gap-1">
                 {template.tags.map((tag) => (
                   <span
@@ -191,7 +209,7 @@ export default function TemplatesPage() {
             </div>
 
             {/* Action */}
-            <div className="p-4 border-t border-slate-800">
+            <div className={cn('p-4 border-t', resolvedTheme === 'dark' ? 'border-slate-800' : 'border-slate-200')}>
               <button
                 onClick={() => handleUseTemplate(template.id)}
                 disabled={creatingFromTemplate === template.id}
@@ -218,7 +236,7 @@ export default function TemplatesPage() {
       {/* Empty State */}
       {filteredTemplates.length === 0 && (
         <div className="text-center py-12">
-          <p className="text-slate-400">No templates found for this category.</p>
+          <p className={cn(resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>No templates found for this category.</p>
         </div>
       )}
     </AppLayout>
