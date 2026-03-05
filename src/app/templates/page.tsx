@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { AppLayout } from '@/components';
 import { useStore } from '@/store/useStore';
-import { PORTFOLIO_TEMPLATES, TemplateCategory, RiskLevel, Formation } from '@/types';
+import { PORTFOLIO_TEMPLATES, TemplateCategory, RiskLevel, PortfolioTemplate, Asset } from '@/types';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/ThemeProvider';
+import { TemplateDetailModal } from '@/components/templates';
 
 const CATEGORIES: { value: TemplateCategory | 'all'; label: string }[] = [
   { value: 'all', label: 'All Templates' },
@@ -36,10 +37,37 @@ export default function TemplatesPage() {
   const { currentUser, createPortfolio, assignAssetToPosition } = useStore();
   const [selectedCategory, setSelectedCategory] = useState<TemplateCategory | 'all'>('all');
   const [creatingFromTemplate, setCreatingFromTemplate] = useState<string | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<PortfolioTemplate | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   const filteredTemplates = PORTFOLIO_TEMPLATES.filter(
     (t) => selectedCategory === 'all' || t.category === selectedCategory
   );
+
+  const handleViewTemplate = (template: PortfolioTemplate) => {
+    setSelectedTemplate(template);
+    setShowDetailModal(true);
+  };
+
+  const handleCloseModal = () => {
+    setShowDetailModal(false);
+    setSelectedTemplate(null);
+  };
+
+  // Fetch asset data for a symbol
+  const fetchAssetData = async (symbol: string): Promise<Asset | null> => {
+    try {
+      const response = await fetch(`/api/yahoo-finance?symbol=${encodeURIComponent(symbol)}`);
+      const data = await response.json();
+      if (data.success && data.asset) {
+        return data.asset;
+      }
+      return null;
+    } catch (error) {
+      console.error(`Failed to fetch data for ${symbol}:`, error);
+      return null;
+    }
+  };
 
   const handleUseTemplate = async (templateId: string) => {
     if (!currentUser) {
@@ -61,9 +89,18 @@ export default function TemplatesPage() {
       );
 
       if (portfolio) {
-        // Assign assets from template
-        // Note: This would need the actual asset data to be fetched
-        // For now, we just create the portfolio and redirect
+        // Fetch and assign assets for each position in the template
+        for (const stock of template.stocks) {
+          const asset = await fetchAssetData(stock.symbol);
+          if (asset) {
+            await assignAssetToPosition(portfolio.id, stock.positionId, asset);
+          }
+        }
+
+        // Close modal if open
+        handleCloseModal();
+
+        // Redirect to the portfolio page
         router.push(`/portfolio/${portfolio.id}`);
       }
     } catch (error) {
@@ -126,11 +163,12 @@ export default function TemplatesPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 * index }}
             className={cn(
-              'rounded-2xl overflow-hidden transition-colors border',
+              'rounded-2xl overflow-hidden transition-colors border cursor-pointer',
               resolvedTheme === 'dark'
-                ? 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
-                : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+                ? 'bg-slate-900/80 border-slate-800 hover:border-emerald-500/50'
+                : 'bg-white border-slate-200 hover:border-emerald-500/50 shadow-sm'
             )}
+            onClick={() => handleViewTemplate(template)}
           >
             {/* Header */}
             <div className={cn('p-6 border-b', resolvedTheme === 'dark' ? 'border-slate-800' : 'border-slate-200')}>
@@ -208,26 +246,45 @@ export default function TemplatesPage() {
               </div>
             </div>
 
-            {/* Action */}
+            {/* Actions */}
             <div className={cn('p-4 border-t', resolvedTheme === 'dark' ? 'border-slate-800' : 'border-slate-200')}>
-              <button
-                onClick={() => handleUseTemplate(template.id)}
-                disabled={creatingFromTemplate === template.id}
-                className={cn(
-                  'w-full py-2 rounded-lg font-medium transition-colors',
-                  'bg-emerald-500 hover:bg-emerald-600 text-white',
-                  creatingFromTemplate === template.id && 'opacity-50 cursor-not-allowed'
-                )}
-              >
-                {creatingFromTemplate === template.id ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Creating...
-                  </span>
-                ) : (
-                  'Use This Template'
-                )}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleViewTemplate(template);
+                  }}
+                  className={cn(
+                    'flex-1 py-2 rounded-lg font-medium transition-colors border',
+                    resolvedTheme === 'dark'
+                      ? 'border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white'
+                      : 'border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+                  )}
+                >
+                  View Details
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleUseTemplate(template.id);
+                  }}
+                  disabled={creatingFromTemplate === template.id}
+                  className={cn(
+                    'flex-1 py-2 rounded-lg font-medium transition-colors',
+                    'bg-emerald-500 hover:bg-emerald-600 text-white',
+                    creatingFromTemplate === template.id && 'opacity-50 cursor-not-allowed'
+                  )}
+                >
+                  {creatingFromTemplate === template.id ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Creating...
+                    </span>
+                  ) : (
+                    'Use Template'
+                  )}
+                </button>
+              </div>
             </div>
           </motion.div>
         ))}
@@ -239,6 +296,15 @@ export default function TemplatesPage() {
           <p className={cn(resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>No templates found for this category.</p>
         </div>
       )}
+
+      {/* Template Detail Modal */}
+      <TemplateDetailModal
+        template={selectedTemplate}
+        isOpen={showDetailModal}
+        onClose={handleCloseModal}
+        onUseTemplate={handleUseTemplate}
+        isCreating={creatingFromTemplate === selectedTemplate?.id}
+      />
     </AppLayout>
   );
 }

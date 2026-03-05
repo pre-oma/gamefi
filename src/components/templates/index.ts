@@ -1,0 +1,1 @@
+export { TemplateDetailModal } from './TemplateDetailModal';
