@@ -3,27 +3,90 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { PortfolioPerformance } from '@/types';
-import { getLeaderboardEntries, cn, formatCurrency, formatPercent, formatDate } from '@/lib/utils';
-import { portfolioStorage } from '@/lib/storage';
+import { PortfolioPerformance, Portfolio, LeaderboardEntry } from '@/types';
+import { cn, formatCurrency, formatPercent, formatDate } from '@/lib/utils';
+import { useStore } from '@/store/useStore';
 import { fetchMultiplePortfolioPerformances } from '@/hooks/usePortfolioRealPerformance';
 import { useTheme } from '@/components/ThemeProvider';
 
 export const LeaderboardTable: React.FC = () => {
   const { resolvedTheme } = useTheme();
+  const { publicPortfolios, portfolios, currentUser, refreshPortfolios } = useStore();
   const [realPerformances, setRealPerformances] = useState<Map<string, { performance: PortfolioPerformance; isRealData: boolean }>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
+  const [usernames, setUsernames] = useState<Map<string, { username: string; avatar: string }>>(new Map());
+
+  // Combine public portfolios with current user's portfolios (avoiding duplicates)
+  const allPortfolios = useMemo(() => {
+    const portfolioMap = new Map<string, Portfolio>();
+
+    // Add public portfolios
+    publicPortfolios.forEach(p => portfolioMap.set(p.id, p));
+
+    // Add current user's portfolios (they might not be in public yet or might be private)
+    portfolios.forEach(p => {
+      if (p.isPublic) {
+        portfolioMap.set(p.id, p);
+      }
+    });
+
+    return Array.from(portfolioMap.values());
+  }, [publicPortfolios, portfolios]);
+
+  // Refresh portfolios on mount
+  useEffect(() => {
+    refreshPortfolios();
+  }, [refreshPortfolios]);
+
+  // Fetch usernames for all portfolio owners
+  useEffect(() => {
+    const fetchUsernames = async () => {
+      const userIds = [...new Set(allPortfolios.map(p => p.userId))];
+      const newUsernames = new Map<string, { username: string; avatar: string }>();
+
+      for (const userId of userIds) {
+        // Check if it's the current user
+        if (currentUser && userId === currentUser.id) {
+          newUsernames.set(userId, {
+            username: currentUser.username,
+            avatar: currentUser.avatar || '/default-avatar.png'
+          });
+          continue;
+        }
+
+        // Fetch from API
+        try {
+          const response = await fetch(`/api/users?id=${userId}`);
+          const data = await response.json();
+          if (data.success && data.user) {
+            newUsernames.set(userId, {
+              username: data.user.username,
+              avatar: data.user.avatar || '/default-avatar.png'
+            });
+          }
+        } catch (error) {
+          console.error(`Failed to fetch user ${userId}:`, error);
+          newUsernames.set(userId, { username: 'Unknown', avatar: '/default-avatar.png' });
+        }
+      }
+
+      setUsernames(newUsernames);
+    };
+
+    if (allPortfolios.length > 0) {
+      fetchUsernames();
+    }
+  }, [allPortfolios, currentUser]);
 
   // Fetch real performance data (always from creation date)
   useEffect(() => {
-    const publicPortfolios = portfolioStorage.getPublic();
-    if (publicPortfolios.length === 0) return;
+    if (allPortfolios.length === 0) return;
 
     const fetchData = async () => {
       setIsLoading(true);
       try {
         // Always use creation date for calculating returns
-        const performances = await fetchMultiplePortfolioPerformances(publicPortfolios, '1M', true);
+        const performances = await fetchMultiplePortfolioPerformances(allPortfolios, '1M', true);
         setRealPerformances(performances);
       } catch (error) {
         console.error('Failed to fetch leaderboard performances:', error);
@@ -33,28 +96,38 @@ export const LeaderboardTable: React.FC = () => {
     };
 
     fetchData();
-  }, []);
+  }, [allPortfolios]);
 
-  // Get entries with real performance data (calculated from creation date)
+  // Build leaderboard entries from portfolios
   const entries = useMemo(() => {
-    const baseEntries = getLeaderboardEntries('all', 20);
+    const leaderboardEntries: LeaderboardEntry[] = allPortfolios.map((portfolio) => {
+      const userData = usernames.get(portfolio.userId);
+      const realData = realPerformances.get(portfolio.id);
 
-    // Update entries with real performance data
-    return baseEntries.map((entry) => {
-      const realData = realPerformances.get(entry.portfolioId);
-      if (realData?.isRealData) {
-        return {
-          ...entry,
-          value: realData.performance.totalValue,
-          returnPercent: realData.performance.totalReturnPercent,
-        };
-      }
-      return entry;
-    }).sort((a, b) => b.returnPercent - a.returnPercent).map((entry, index) => ({
-      ...entry,
-      rank: index + 1,
-    }));
-  }, [realPerformances]);
+      return {
+        rank: 0,
+        userId: portfolio.userId,
+        username: userData?.username || 'Loading...',
+        avatar: userData?.avatar || '/default-avatar.png',
+        portfolioId: portfolio.id,
+        portfolioName: portfolio.name,
+        formation: portfolio.formation,
+        value: realData?.performance.totalValue || 10000,
+        returnPercent: realData?.performance.totalReturnPercent || 0,
+        followers: 0,
+        createdAt: portfolio.createdAt,
+      };
+    });
+
+    // Sort by return and assign ranks
+    return leaderboardEntries
+      .sort((a, b) => b.returnPercent - a.returnPercent)
+      .map((entry, index) => ({
+        ...entry,
+        rank: index + 1,
+      }))
+      .slice(0, 20);
+  }, [allPortfolios, usernames, realPerformances]);
 
   const getRankBadge = (rank: number) => {
     if (rank === 1) return { bg: 'bg-yellow-500', text: 'text-yellow-900', icon: '🥇' };
