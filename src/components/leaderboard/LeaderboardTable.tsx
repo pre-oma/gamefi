@@ -7,8 +7,10 @@ import { PortfolioPerformance } from '@/types';
 import { getLeaderboardEntries, cn, formatCurrency, formatPercent, formatDate } from '@/lib/utils';
 import { portfolioStorage } from '@/lib/storage';
 import { fetchMultiplePortfolioPerformances } from '@/hooks/usePortfolioRealPerformance';
+import { useTheme } from '@/components/ThemeProvider';
 
 export const LeaderboardTable: React.FC = () => {
+  const { resolvedTheme } = useTheme();
   const [realPerformances, setRealPerformances] = useState<Map<string, { performance: PortfolioPerformance; isRealData: boolean }>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
 
@@ -64,9 +66,17 @@ export const LeaderboardTable: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Leaderboard */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden">
+      <div className={cn(
+        'rounded-2xl overflow-hidden border',
+        resolvedTheme === 'dark'
+          ? 'bg-slate-900/80 border-slate-800'
+          : 'bg-white border-slate-200 shadow-sm'
+      )}>
         {/* Header */}
-        <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-slate-800/50 text-xs font-medium text-slate-400 uppercase tracking-wider">
+        <div className={cn(
+          'grid grid-cols-12 gap-4 px-6 py-4 text-xs font-medium uppercase tracking-wider',
+          resolvedTheme === 'dark' ? 'bg-slate-800/50 text-slate-400' : 'bg-slate-50 text-slate-500'
+        )}>
           <div className="col-span-1">Rank</div>
           <div className="col-span-4">Investor</div>
           <div className="col-span-2">Portfolio</div>
@@ -76,7 +86,7 @@ export const LeaderboardTable: React.FC = () => {
         </div>
 
         {/* Rows */}
-        <div className="divide-y divide-slate-800">
+        <div className={cn('divide-y', resolvedTheme === 'dark' ? 'divide-slate-800' : 'divide-slate-200')}>
           {entries.length === 0 ? (
             <div className="py-12 text-center text-slate-500">
               <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -95,7 +105,10 @@ export const LeaderboardTable: React.FC = () => {
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.05 }}
-                  className="grid grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-slate-800/30 transition-colors"
+                  className={cn(
+                    'grid grid-cols-12 gap-4 px-6 py-4 items-center transition-colors',
+                    resolvedTheme === 'dark' ? 'hover:bg-slate-800/30' : 'hover:bg-slate-50'
+                  )}
                 >
                   {/* Rank */}
                   <div className="col-span-1">
@@ -119,10 +132,13 @@ export const LeaderboardTable: React.FC = () => {
                     <img
                       src={entry.avatar}
                       alt={entry.username}
-                      className="w-10 h-10 rounded-full ring-2 ring-slate-700"
+                      className={cn(
+                        'w-10 h-10 rounded-full ring-2',
+                        resolvedTheme === 'dark' ? 'ring-slate-700' : 'ring-slate-200'
+                      )}
                     />
                     <div className="min-w-0">
-                      <p className="font-medium text-white truncate">@{entry.username}</p>
+                      <p className={cn('font-medium truncate', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>@{entry.username}</p>
                       <p className="text-sm text-slate-500">{entry.followers} followers</p>
                     </div>
                   </div>
@@ -133,7 +149,7 @@ export const LeaderboardTable: React.FC = () => {
                       href={`/portfolio/${entry.portfolioId}`}
                       className="hover:text-emerald-400 transition-colors"
                     >
-                      <p className="font-medium text-slate-300 truncate">{entry.portfolioName}</p>
+                      <p className={cn('font-medium truncate', resolvedTheme === 'dark' ? 'text-slate-300' : 'text-slate-700')}>{entry.portfolioName}</p>
                       <p className="text-xs text-slate-500">{entry.formation}</p>
                     </Link>
                   </div>
@@ -145,13 +161,13 @@ export const LeaderboardTable: React.FC = () => {
 
                   {/* Value */}
                   <div className="col-span-1 text-right">
-                    <span className="font-medium text-white">{formatCurrency(entry.value)}</span>
+                    <span className={cn('font-medium', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{formatCurrency(entry.value)}</span>
                   </div>
 
                   {/* Return (since creation) */}
                   <div className="col-span-2 text-right">
                     {isLoading ? (
-                      <div className="w-16 h-6 bg-slate-700 animate-pulse rounded ml-auto" />
+                      <div className={cn('w-16 h-6 animate-pulse rounded ml-auto', resolvedTheme === 'dark' ? 'bg-slate-700' : 'bg-slate-200')} />
                     ) : (
                       <span
                         className={cn(

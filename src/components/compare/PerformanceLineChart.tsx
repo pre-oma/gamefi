@@ -12,6 +12,8 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { BenchmarkPerformance, PortfolioPerformance } from '@/types';
+import { cn } from '@/lib/utils';
+import { useTheme } from '@/components/ThemeProvider';
 
 interface PortfolioData {
   name: string;
@@ -32,6 +34,8 @@ export const PerformanceLineChart: React.FC<PerformanceLineChartProps> = ({
   portfolios,
   benchmarks,
 }) => {
+  const { resolvedTheme } = useTheme();
+
   // Get portfolio creation dates
   const portfolioCreationDates = useMemo(() => {
     return portfolios.map((p) => {
@@ -152,8 +156,13 @@ export const PerformanceLineChart: React.FC<PerformanceLineChartProps> = ({
     });
 
     return (
-      <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 shadow-xl">
-        <p className="text-slate-400 text-xs mb-2">{label ? formatDate(label) : ''}</p>
+      <div className={cn(
+        'rounded-lg p-3 shadow-xl border',
+        resolvedTheme === 'dark'
+          ? 'bg-slate-800 border-slate-700'
+          : 'bg-white border-slate-200'
+      )}>
+        <p className={cn('text-xs mb-2', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-500')}>{label ? formatDate(label) : ''}</p>
         <div className="space-y-1">
           {groupedPayload.map((entry, index) => (
             <div key={index} className="flex items-center gap-2 text-sm">
@@ -161,11 +170,11 @@ export const PerformanceLineChart: React.FC<PerformanceLineChartProps> = ({
                 className="w-2 h-2 rounded-full"
                 style={{ backgroundColor: entry.color }}
               />
-              <span className="text-slate-300">
+              <span className={cn(resolvedTheme === 'dark' ? 'text-slate-300' : 'text-slate-700')}>
                 {entry.name}
-                {entry.isSimulated && <span className="text-slate-500 text-xs ml-1">(projected)</span>}
+                {entry.isSimulated && <span className={cn('text-xs ml-1', resolvedTheme === 'dark' ? 'text-slate-500' : 'text-slate-400')}>(projected)</span>}
               </span>
-              <span className="text-white font-medium">
+              <span className={cn('font-medium', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>
                 {(entry.value - 100).toFixed(2)}%
               </span>
             </div>
@@ -180,9 +189,14 @@ export const PerformanceLineChart: React.FC<PerformanceLineChartProps> = ({
 
   if (chartData.length === 0) {
     return (
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Performance Over Time</h3>
-        <div className="h-64 flex items-center justify-center text-slate-500">
+      <div className={cn(
+        'rounded-xl p-6 border',
+        resolvedTheme === 'dark'
+          ? 'bg-slate-900/50 border-slate-800'
+          : 'bg-white border-slate-200 shadow-sm'
+      )}>
+        <h3 className={cn('text-lg font-semibold mb-4', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>Performance Over Time</h3>
+        <div className={cn('h-64 flex items-center justify-center', resolvedTheme === 'dark' ? 'text-slate-500' : 'text-slate-400')}>
           Select portfolios or benchmarks to view performance comparison
         </div>
       </div>
@@ -190,8 +204,13 @@ export const PerformanceLineChart: React.FC<PerformanceLineChartProps> = ({
   }
 
   return (
-    <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-      <h3 className="text-lg font-semibold text-white mb-4">Performance Over Time</h3>
+    <div className={cn(
+      'rounded-xl p-6 border',
+      resolvedTheme === 'dark'
+        ? 'bg-slate-900/50 border-slate-800'
+        : 'bg-white border-slate-200 shadow-sm'
+    )}>
+      <h3 className={cn('text-lg font-semibold mb-4', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>Performance Over Time</h3>
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
@@ -216,7 +235,7 @@ export const PerformanceLineChart: React.FC<PerformanceLineChartProps> = ({
               formatter={(value: string) => {
                 // Clean up legend labels
                 const cleanValue = value.replace(' (Projected)', '').replace(' (Actual)', '');
-                return <span className="text-slate-300 text-sm">{cleanValue}</span>;
+                return <span className={cn('text-sm', resolvedTheme === 'dark' ? 'text-slate-300' : 'text-slate-700')}>{cleanValue}</span>;
               }}
             />
             <ReferenceLine y={100} stroke="#475569" strokeDasharray="3 3" />

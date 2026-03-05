@@ -3,6 +3,7 @@
 import React from 'react';
 import { PortfolioPerformance, BenchmarkPerformance } from '@/types';
 import { cn, formatCurrency, formatPercent, formatPE, formatEPS, formatPercentMetric, formatRatio } from '@/lib/utils';
+import { useTheme } from '@/components/ThemeProvider';
 
 interface MetricConfig {
   key: keyof PortfolioPerformance;
@@ -42,6 +43,8 @@ export const ComparisonTable: React.FC<ComparisonTableProps> = ({
   performances,
   benchmarks = [],
 }) => {
+  const { resolvedTheme } = useTheme();
+
   const findBestIndex = (metric: MetricConfig): number => {
     if (performances.length === 0) return -1;
 
@@ -69,16 +72,21 @@ export const ComparisonTable: React.FC<ComparisonTableProps> = ({
   };
 
   return (
-    <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-800">
-        <h2 className="text-lg font-semibold text-white">Detailed Comparison</h2>
+    <div className={cn(
+      'rounded-2xl overflow-hidden border',
+      resolvedTheme === 'dark'
+        ? 'bg-slate-900/80 border-slate-800'
+        : 'bg-white border-slate-200 shadow-sm'
+    )}>
+      <div className={cn('px-6 py-4 border-b', resolvedTheme === 'dark' ? 'border-slate-800' : 'border-slate-200')}>
+        <h2 className={cn('text-lg font-semibold', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>Detailed Comparison</h2>
       </div>
 
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-slate-800">
-              <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+            <tr className={cn('border-b', resolvedTheme === 'dark' ? 'border-slate-800' : 'border-slate-200')}>
+              <th className={cn('px-6 py-3 text-left text-xs font-medium uppercase tracking-wider', resolvedTheme === 'dark' ? 'text-slate-500' : 'text-slate-500')}>
                 Metric
               </th>
               {portfolioNames.map((name, index) => (
@@ -106,13 +114,13 @@ export const ComparisonTable: React.FC<ComparisonTableProps> = ({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800">
+          <tbody className={cn('divide-y', resolvedTheme === 'dark' ? 'divide-slate-800' : 'divide-slate-200')}>
             {METRICS.map((metric) => {
               const bestIndex = findBestIndex(metric);
 
               return (
-                <tr key={metric.key} className="hover:bg-slate-800/30 transition-colors">
-                  <td className="px-6 py-4 text-sm text-slate-400">{metric.label}</td>
+                <tr key={metric.key} className={cn('transition-colors', resolvedTheme === 'dark' ? 'hover:bg-slate-800/30' : 'hover:bg-slate-50')}>
+                  <td className={cn('px-6 py-4 text-sm', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>{metric.label}</td>
                   {performances.map((perf, index) => {
                     const rawValue = perf[metric.key];
                     // Preserve null/undefined for metrics that use N/A formatting
@@ -126,7 +134,7 @@ export const ComparisonTable: React.FC<ComparisonTableProps> = ({
                         key={index}
                         className={cn(
                           'px-6 py-4 text-sm font-medium',
-                          isBest ? 'text-emerald-400' : 'text-white'
+                          isBest ? 'text-emerald-400' : resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900'
                         )}
                       >
                         <div className="flex items-center gap-2">

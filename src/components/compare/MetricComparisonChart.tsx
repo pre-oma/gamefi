@@ -3,7 +3,8 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { PortfolioPerformance, BenchmarkPerformance } from '@/types';
-import { formatPercent } from '@/lib/utils';
+import { formatPercent, cn } from '@/lib/utils';
+import { useTheme } from '@/components/ThemeProvider';
 
 interface MetricComparisonChartProps {
   performances: { name: string; performance: PortfolioPerformance }[];
@@ -47,6 +48,8 @@ export const MetricComparisonChart: React.FC<MetricComparisonChartProps> = ({
   formatValue = (v) => v.toFixed(2),
   higherIsBetter = true,
 }) => {
+  const { resolvedTheme } = useTheme();
+
   // Portfolio data
   const portfolioData = performances.map((p, index) => ({
     name: p.name,
@@ -78,8 +81,13 @@ export const MetricComparisonChart: React.FC<MetricComparisonChartProps> = ({
     : Math.min(...values);
 
   return (
-    <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
-      <h3 className="text-sm font-medium text-slate-400 mb-3">{title}</h3>
+    <div className={cn(
+      'rounded-xl p-4 border',
+      resolvedTheme === 'dark'
+        ? 'bg-slate-900/50 border-slate-800'
+        : 'bg-white border-slate-200 shadow-sm'
+    )}>
+      <h3 className={cn('text-sm font-medium mb-3', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>{title}</h3>
       <div className="h-40">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical" margin={{ left: 0, right: 20 }}>
@@ -100,11 +108,11 @@ export const MetricComparisonChart: React.FC<MetricComparisonChartProps> = ({
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#1e293b',
-                border: '1px solid #334155',
+                backgroundColor: resolvedTheme === 'dark' ? '#1e293b' : '#ffffff',
+                border: `1px solid ${resolvedTheme === 'dark' ? '#334155' : '#e2e8f0'}`,
                 borderRadius: '8px',
               }}
-              labelStyle={{ color: '#94a3b8' }}
+              labelStyle={{ color: resolvedTheme === 'dark' ? '#94a3b8' : '#64748b' }}
               formatter={(value: number | undefined) => [formatValue(value ?? 0), title]}
             />
             <Bar dataKey="value" radius={[0, 4, 4, 0]}>

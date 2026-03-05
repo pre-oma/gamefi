@@ -4,6 +4,7 @@ import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CustomComparisonSymbol } from '@/types';
 import { cn } from '@/lib/utils';
+import { useTheme } from '@/components/ThemeProvider';
 
 interface CustomSymbolSearchProps {
   customSymbols: CustomComparisonSymbol[];
@@ -21,6 +22,7 @@ export const CustomSymbolSearch: React.FC<CustomSymbolSearchProps> = ({
   onRemoveSymbol,
   maxSymbols = 5,
 }) => {
+  const { resolvedTheme } = useTheme();
   const [searchInput, setSearchInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,9 +81,14 @@ export const CustomSymbolSearch: React.FC<CustomSymbolSearchProps> = ({
   };
 
   return (
-    <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+    <div className={cn(
+      'rounded-xl p-4 border',
+      resolvedTheme === 'dark'
+        ? 'bg-slate-900/50 border-slate-800'
+        : 'bg-white border-slate-200 shadow-sm'
+    )}>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-slate-400">Add Custom Symbol</h3>
+        <h3 className={cn('text-sm font-medium', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>Add Custom Symbol</h3>
         <span className="text-xs text-slate-500">
           {customSymbols.length}/{maxSymbols} added
         </span>
@@ -99,7 +106,12 @@ export const CustomSymbolSearch: React.FC<CustomSymbolSearchProps> = ({
             }}
             onKeyDown={handleKeyDown}
             placeholder="Enter symbol (e.g., AAPL, MSFT)"
-            className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            className={cn(
+              'w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-emerald-500 border',
+              resolvedTheme === 'dark'
+                ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500'
+                : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'
+            )}
             disabled={isLoading || customSymbols.length >= maxSymbols}
           />
           {isLoading && (
@@ -114,7 +126,9 @@ export const CustomSymbolSearch: React.FC<CustomSymbolSearchProps> = ({
           className={cn(
             'px-4 py-2 text-sm font-medium rounded-lg transition-colors',
             isLoading || !searchInput.trim() || customSymbols.length >= maxSymbols
-              ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+              ? resolvedTheme === 'dark'
+                ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
               : 'bg-emerald-500 text-white hover:bg-emerald-600'
           )}
         >
@@ -155,8 +169,8 @@ export const CustomSymbolSearch: React.FC<CustomSymbolSearchProps> = ({
                 className="w-2 h-2 rounded-full"
                 style={{ backgroundColor: symbol.color }}
               />
-              <span className="text-white font-medium">{symbol.symbol}</span>
-              <span className="text-slate-400 text-xs hidden sm:inline">
+              <span className={cn('font-medium', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>{symbol.symbol}</span>
+              <span className={cn('text-xs hidden sm:inline', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-500')}>
                 {symbol.name.length > 20 ? symbol.name.slice(0, 20) + '...' : symbol.name}
               </span>
               <button

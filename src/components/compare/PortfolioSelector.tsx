@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { Portfolio, User } from '@/types';
 import { cn } from '@/lib/utils';
+import { useTheme } from '@/components/ThemeProvider';
 
 interface PortfolioSelectorProps {
   portfolios: Portfolio[];
@@ -23,6 +24,7 @@ export const PortfolioSelector: React.FC<PortfolioSelectorProps> = ({
   users,
   index,
 }) => {
+  const { resolvedTheme } = useTheme();
   const currentSelection = selectedPortfolioIds[index] || '';
 
   // Filter out already selected portfolios (except current selection)
@@ -49,10 +51,13 @@ export const PortfolioSelector: React.FC<PortfolioSelectorProps> = ({
         value={currentSelection}
         onChange={(e) => onSelect(e.target.value)}
         className={cn(
-          'w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white',
+          'w-full px-4 py-3 rounded-xl border',
           'focus:outline-none focus:border-emerald-500 transition-colors',
           'appearance-none cursor-pointer',
-          !currentSelection && 'text-slate-400'
+          resolvedTheme === 'dark'
+            ? 'bg-slate-800 border-slate-700 text-white'
+            : 'bg-white border-slate-200 text-slate-900 shadow-sm',
+          !currentSelection && (resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-500')
         )}
       >
         <option value="">Select Portfolio {index + 1}</option>

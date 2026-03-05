@@ -4,6 +4,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { BenchmarkSymbol, BenchmarkInfo, BENCHMARKS } from '@/types';
 import { cn } from '@/lib/utils';
+import { useTheme } from '@/components/ThemeProvider';
 
 interface BenchmarkSelectorProps {
   selectedBenchmarks: BenchmarkSymbol[];
@@ -16,13 +17,19 @@ export const BenchmarkSelector: React.FC<BenchmarkSelectorProps> = ({
   onToggle,
   maxSelections = 3,
 }) => {
+  const { resolvedTheme } = useTheme();
   const isSelected = (symbol: BenchmarkSymbol) => selectedBenchmarks.includes(symbol);
   const canSelect = selectedBenchmarks.length < maxSelections;
 
   return (
-    <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+    <div className={cn(
+      'rounded-xl p-4 border',
+      resolvedTheme === 'dark'
+        ? 'bg-slate-900/50 border-slate-800'
+        : 'bg-white border-slate-200 shadow-sm'
+    )}>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-slate-400">Compare with Benchmarks</h3>
+        <h3 className={cn('text-sm font-medium', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>Compare with Benchmarks</h3>
         <span className="text-xs text-slate-500">
           {selectedBenchmarks.length}/{maxSelections} selected
         </span>
@@ -43,10 +50,16 @@ export const BenchmarkSelector: React.FC<BenchmarkSelectorProps> = ({
                 'relative px-3 py-2 rounded-lg text-sm font-medium transition-all',
                 'border flex items-center gap-2',
                 selected
-                  ? 'bg-slate-800 border-slate-600 text-white'
+                  ? resolvedTheme === 'dark'
+                    ? 'bg-slate-800 border-slate-600 text-white'
+                    : 'bg-slate-100 border-slate-300 text-slate-900'
                   : disabled
-                    ? 'bg-slate-900/50 border-slate-800 text-slate-600 cursor-not-allowed'
-                    : 'bg-slate-900/50 border-slate-700 text-slate-400 hover:border-slate-600 hover:text-slate-300'
+                    ? resolvedTheme === 'dark'
+                      ? 'bg-slate-900/50 border-slate-800 text-slate-600 cursor-not-allowed'
+                      : 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
+                    : resolvedTheme === 'dark'
+                      ? 'bg-slate-900/50 border-slate-700 text-slate-400 hover:border-slate-600 hover:text-slate-300'
+                      : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900'
               )}
               disabled={disabled}
               title={benchmark.description}
@@ -86,7 +99,7 @@ export const BenchmarkSelector: React.FC<BenchmarkSelectorProps> = ({
       </div>
 
       {selectedBenchmarks.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-slate-800">
+        <div className={cn('mt-3 pt-3 border-t', resolvedTheme === 'dark' ? 'border-slate-800' : 'border-slate-200')}>
           <div className="flex flex-wrap gap-1">
             {selectedBenchmarks.map((symbol) => {
               const benchmark = BENCHMARKS.find((b) => b.symbol === symbol);
