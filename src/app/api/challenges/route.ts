@@ -150,9 +150,9 @@ export async function GET(request: NextRequest) {
       formattedChallenges.push(challenge);
     }
 
-    // Separate pending invites (where user is the opponent and status is pending)
+    // Separate pending challenges (where user is either challenger or opponent and status is pending)
     const pendingInvites = formattedChallenges.filter(
-      (c) => c.status === 'pending' && c.opponentId === userId
+      (c) => c.status === 'pending' && (c.opponentId === userId || c.challengerId === userId)
     );
 
     const activeChallenges = formattedChallenges.filter(
