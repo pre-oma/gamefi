@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Portfolio, User } from '@/types';
@@ -8,7 +8,7 @@ import { useStore } from '@/store/useStore';
 import { userStorage } from '@/lib/storage';
 import { cn, formatCurrency, formatPercent, getRelativeTime, formatDate } from '@/lib/utils';
 import { FormationField } from './FormationField';
-import { Button } from '@/components/ui';
+import { Button, TeamLimitModal } from '@/components/ui';
 import { usePortfolioRealPerformance } from '@/hooks/usePortfolioRealPerformance';
 import { useTheme } from '@/components/ThemeProvider';
 
@@ -24,8 +24,9 @@ export const PortfolioCard: React.FC<PortfolioCardProps> = ({
   showActions = true,
 }) => {
   const { resolvedTheme } = useTheme();
-  const { currentUser, likePortfolio, clonePortfolio } = useStore();
+  const { currentUser, likePortfolio, clonePortfolio, canCreateTeam, getTeamSlotInfo, unlockTeamSlot } = useStore();
   const owner = userStorage.getUserById(portfolio.userId);
+  const [showLimitModal, setShowLimitModal] = useState(false);
 
   // Use real performance data from Yahoo Finance
   const { performance, isLoading, isRealData } = usePortfolioRealPerformance(portfolio);
@@ -33,6 +34,8 @@ export const PortfolioCard: React.FC<PortfolioCardProps> = ({
   const isOwner = currentUser?.id === portfolio.userId;
   const hasLiked = currentUser ? portfolio.likes.includes(currentUser.id) : false;
   const filledPositions = portfolio.players.filter((p) => p.asset !== null).length;
+
+  const teamSlotInfo = getTeamSlotInfo();
 
   const handleLike = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -46,6 +49,20 @@ export const PortfolioCard: React.FC<PortfolioCardProps> = ({
     e.preventDefault();
     e.stopPropagation();
     if (currentUser && !isOwner) {
+      // Check if user can create more teams
+      if (!canCreateTeam()) {
+        setShowLimitModal(true);
+        return;
+      }
+      clonePortfolio(portfolio.id);
+    }
+  };
+
+  const handleUnlockSlot = async () => {
+    const success = await unlockTeamSlot();
+    if (success) {
+      setShowLimitModal(false);
+      // Now clone the portfolio
       clonePortfolio(portfolio.id);
     }
   };
@@ -200,6 +217,16 @@ export const PortfolioCard: React.FC<PortfolioCardProps> = ({
           </div>
         )}
       </Link>
+
+      {/* Team Limit Modal */}
+      <TeamLimitModal
+        isOpen={showLimitModal}
+        onClose={() => setShowLimitModal(false)}
+        currentTeams={teamSlotInfo.current}
+        maxTeams={teamSlotInfo.max}
+        userXp={currentUser?.xp || 0}
+        onUnlockSlot={handleUnlockSlot}
+      />
     </motion.div>
   );
 };

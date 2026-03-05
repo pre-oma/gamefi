@@ -9,6 +9,7 @@ import { PORTFOLIO_TEMPLATES, TemplateCategory, RiskLevel, PortfolioTemplate, As
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/ThemeProvider';
 import { TemplateDetailModal } from '@/components/templates';
+import { TeamLimitModal } from '@/components/ui';
 
 const CATEGORIES: { value: TemplateCategory | 'all'; label: string }[] = [
   { value: 'all', label: 'All Templates' },
@@ -34,11 +35,15 @@ const DIFFICULTY_COLORS = {
 export default function TemplatesPage() {
   const router = useRouter();
   const { resolvedTheme } = useTheme();
-  const { currentUser, createPortfolio, assignAssetToPosition } = useStore();
+  const { currentUser, createPortfolio, assignAssetToPosition, canCreateTeam, getTeamSlotInfo, unlockTeamSlot } = useStore();
   const [selectedCategory, setSelectedCategory] = useState<TemplateCategory | 'all'>('all');
   const [creatingFromTemplate, setCreatingFromTemplate] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<PortfolioTemplate | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [pendingTemplateId, setPendingTemplateId] = useState<string | null>(null);
+
+  const teamSlotInfo = getTeamSlotInfo();
 
   const filteredTemplates = PORTFOLIO_TEMPLATES.filter(
     (t) => selectedCategory === 'all' || t.category === selectedCategory
@@ -75,6 +80,17 @@ export default function TemplatesPage() {
       return;
     }
 
+    // Check if user can create more teams
+    if (!canCreateTeam()) {
+      setPendingTemplateId(templateId);
+      setShowLimitModal(true);
+      return;
+    }
+
+    await createFromTemplate(templateId);
+  };
+
+  const createFromTemplate = async (templateId: string) => {
     const template = PORTFOLIO_TEMPLATES.find((t) => t.id === templateId);
     if (!template) return;
 
@@ -97,8 +113,9 @@ export default function TemplatesPage() {
           }
         }
 
-        // Close modal if open
+        // Close modals if open
         handleCloseModal();
+        setShowLimitModal(false);
 
         // Redirect to the portfolio page
         router.push(`/portfolio/${portfolio.id}`);
@@ -107,6 +124,15 @@ export default function TemplatesPage() {
       console.error('Failed to create portfolio from template:', error);
     } finally {
       setCreatingFromTemplate(null);
+      setPendingTemplateId(null);
+    }
+  };
+
+  const handleUnlockSlot = async () => {
+    const success = await unlockTeamSlot();
+    if (success && pendingTemplateId) {
+      setShowLimitModal(false);
+      await createFromTemplate(pendingTemplateId);
     }
   };
 
@@ -304,6 +330,19 @@ export default function TemplatesPage() {
         onClose={handleCloseModal}
         onUseTemplate={handleUseTemplate}
         isCreating={creatingFromTemplate === selectedTemplate?.id}
+      />
+
+      {/* Team Limit Modal */}
+      <TeamLimitModal
+        isOpen={showLimitModal}
+        onClose={() => {
+          setShowLimitModal(false);
+          setPendingTemplateId(null);
+        }}
+        currentTeams={teamSlotInfo.current}
+        maxTeams={teamSlotInfo.max}
+        userXp={currentUser?.xp || 0}
+        onUnlockSlot={handleUnlockSlot}
       />
     </AppLayout>
   );
