@@ -434,22 +434,40 @@ export const exportPortfolioToCSV = (portfolio: Portfolio, performance: Portfoli
 };
 
 // Level calculation from XP
-export const calculateLevel = (xp: number): { level: number; currentXp: number; nextLevelXp: number } => {
-  // XP required doubles each level: 100, 200, 400, 800...
-  let level = 1;
-  let totalXpRequired = 100;
-  let previousTotal = 0;
+// Level thresholds:
+// Level 1: 0 - 999 XP
+// Level 2: 1000 - 2999 XP
+// Level 3: 3000 - 4999 XP
+// Level 4: 5000 - 9999 XP
+// Level 5: 10000+ XP (max level)
+export const calculateLevel = (xp: number): { level: number; currentXp: number; nextLevelXp: number; xpForCurrentLevel: number } => {
+  const thresholds = [
+    { level: 1, min: 0, max: 1000 },
+    { level: 2, min: 1000, max: 3000 },
+    { level: 3, min: 3000, max: 5000 },
+    { level: 4, min: 5000, max: 10000 },
+    { level: 5, min: 10000, max: Infinity },
+  ];
 
-  while (xp >= totalXpRequired) {
-    previousTotal = totalXpRequired;
-    totalXpRequired += 100 * Math.pow(2, level);
-    level++;
+  for (const threshold of thresholds) {
+    if (xp < threshold.max) {
+      const xpInLevel = xp - threshold.min;
+      const xpNeededForLevel = threshold.max - threshold.min;
+      return {
+        level: threshold.level,
+        currentXp: xpInLevel,
+        nextLevelXp: xpNeededForLevel,
+        xpForCurrentLevel: threshold.min,
+      };
+    }
   }
 
+  // Max level reached (10000+ XP)
   return {
-    level,
-    currentXp: xp - previousTotal,
-    nextLevelXp: totalXpRequired - previousTotal,
+    level: 5,
+    currentXp: xp - 10000,
+    nextLevelXp: xp - 10000,
+    xpForCurrentLevel: 10000,
   };
 };
 

@@ -211,16 +211,20 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className={cn('text-2xl font-bold', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>Level {levelInfo?.level || 1}</p>
-            {levelInfo && (
+            {levelInfo && currentUser && (
               <div className="mt-2">
                 <div className={cn('flex justify-between text-xs mb-1', resolvedTheme === 'dark' ? 'text-slate-500' : 'text-slate-500')}>
-                  <span>{levelInfo.currentXp} XP</span>
-                  <span>{levelInfo.nextLevelXp} XP</span>
+                  <span>{currentUser.xp.toLocaleString()} XP</span>
+                  {levelInfo.level < 5 ? (
+                    <span>{(levelInfo.xpForCurrentLevel + levelInfo.nextLevelXp).toLocaleString()} XP</span>
+                  ) : (
+                    <span>Max Level</span>
+                  )}
                 </div>
                 <div className={cn('w-full rounded-full h-1.5', resolvedTheme === 'dark' ? 'bg-slate-700' : 'bg-slate-200')}>
                   <div
                     className="bg-gradient-to-r from-yellow-400 to-orange-400 rounded-full h-1.5"
-                    style={{ width: `${(levelInfo.currentXp / levelInfo.nextLevelXp) * 100}%` }}
+                    style={{ width: `${levelInfo.level >= 5 ? 100 : (levelInfo.currentXp / levelInfo.nextLevelXp) * 100}%` }}
                   />
                 </div>
               </div>
