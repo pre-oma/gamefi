@@ -7,7 +7,10 @@ import {
   formatDateString,
 } from '@/lib/challengePerformance';
 
-// Get base URL for internal API calls
+/* Still needed for the autoSettle path below, which fans out by POSTing
+   back to /api/challenges/settle once per challenge. The settle math
+   itself no longer uses baseUrl — that round-trip went away when we
+   stopped proxying Yahoo through our own API. */
 function getBaseUrl(request: NextRequest): string {
   const host = request.headers.get('host') || 'localhost:3000';
   const protocol = host.includes('localhost') ? 'http' : 'https';
@@ -19,7 +22,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { challengeId } = body as { challengeId?: string };
-    const baseUrl = getBaseUrl(request);
 
     // Build query for challenges that need settling
     let query = supabase
@@ -90,8 +92,7 @@ export async function POST(request: NextRequest) {
           challengerReturnPercent = await calculatePortfolioReturnForPeriod(
             challengerPortfolio,
             startDate,
-            endDate,
-            baseUrl
+            endDate
           );
         }
 
@@ -100,7 +101,7 @@ export async function POST(request: NextRequest) {
 
         if (challenge.type === 'sp500') {
           // Fetch real S&P 500 return
-          opponentReturnPercent = await fetchSP500ReturnForPeriod(startDate, endDate, baseUrl);
+          opponentReturnPercent = await fetchSP500ReturnForPeriod(startDate, endDate);
         } else if (challenge.opponent_portfolio_id) {
           // Fetch opponent portfolio and calculate return
           const { data: opponentPortfolioData } = await supabase
@@ -131,8 +132,7 @@ export async function POST(request: NextRequest) {
             opponentReturnPercent = await calculatePortfolioReturnForPeriod(
               opponentPortfolio,
               startDate,
-              endDate,
-              baseUrl
+              endDate
             );
           }
         }

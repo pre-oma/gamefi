@@ -116,15 +116,14 @@ export async function GET(request: NextRequest) {
           challengerReturnPercent = await calculatePortfolioReturnForPeriod(
             challengerPortfolio,
             startDate,
-            endDate,
-            baseUrl
+            endDate
           );
         }
 
         // Calculate opponent return
         let opponentReturnPercent = 0;
         if (challenge.type === 'sp500') {
-          opponentReturnPercent = await fetchSP500ReturnForPeriod(startDate, endDate, baseUrl);
+          opponentReturnPercent = await fetchSP500ReturnForPeriod(startDate, endDate);
         } else if (challenge.opponent_portfolio_id) {
           const { data: opponentPortfolioData } = await supabase
             .from('portfolios')
@@ -154,8 +153,7 @@ export async function GET(request: NextRequest) {
             opponentReturnPercent = await calculatePortfolioReturnForPeriod(
               opponentPortfolio,
               startDate,
-              endDate,
-              baseUrl
+              endDate
             );
           }
         }

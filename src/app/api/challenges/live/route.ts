@@ -23,12 +23,6 @@ import {
   formatDateString,
 } from '@/lib/challengePerformance';
 
-function getBaseUrl(request: NextRequest): string {
-  const host = request.headers.get('host') || 'localhost:3000';
-  const protocol = host.includes('localhost') ? 'http' : 'https';
-  return `${protocol}://${host}`;
-}
-
 interface DbPortfolioRow {
   id: string;
   user_id: string;
@@ -71,8 +65,6 @@ export async function GET(request: NextRequest) {
         { status: 400 },
       );
     }
-
-    const baseUrl = getBaseUrl(request);
 
     /* Pull every active challenge where this user is on either side. */
     const { data: challenges, error } = await supabase
@@ -120,7 +112,6 @@ export async function GET(request: NextRequest) {
               mapPortfolio(challengerPortfolioData),
               startDate,
               todayStr,
-              baseUrl,
             );
           }
 
@@ -130,7 +121,6 @@ export async function GET(request: NextRequest) {
             opponentReturnPercent = await fetchSP500ReturnForPeriod(
               startDate,
               todayStr,
-              baseUrl,
             );
           } else if (challenge.opponent_portfolio_id) {
             const { data: opponentPortfolioData } = await supabase
@@ -144,7 +134,6 @@ export async function GET(request: NextRequest) {
                 mapPortfolio(opponentPortfolioData),
                 startDate,
                 todayStr,
-                baseUrl,
               );
             }
           }

@@ -1,61 +1,40 @@
 /**
- * Server-side utilities for calculating challenge performance
- * Used by the settlement API to determine winners
+ * Server-side utilities for calculating challenge performance.
+ * Used by the settlement API and the live-returns endpoint to compute
+ * portfolio / S&P returns for a given date range.
+ *
+ * IMPORTANT: This calls fetchYahooHistorical directly (no HTTP hop
+ * through /api/yahoo-finance/historical). Earlier versions used a
+ * `${baseUrl}/api/...` fetch which broke on Vercel preview deployments
+ * because the server-side fetch had no SSO cookie and got 401-walled,
+ * silently returning 0% for every challenge. The direct-call approach
+ * also avoids the latency of a second hop.
  */
 
 import { Portfolio, ChallengeTimeframe } from '@/types';
-
-interface HistoricalDataPoint {
-  date: string;
-  close: number;
-}
+import { fetchYahooHistorical } from '@/lib/yahooHistorical';
 
 /**
- * Fetch historical data for a stock from Yahoo Finance (server-side)
- */
-async function fetchStockHistoricalDataServer(
-  symbol: string,
-  startDate: string,
-  endDate: string,
-  baseUrl: string
-): Promise<HistoricalDataPoint[]> {
-  try {
-    const url = `${baseUrl}/api/yahoo-finance/historical?symbol=${encodeURIComponent(symbol)}&startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`;
-
-    const response = await fetch(url);
-    if (!response.ok) return [];
-
-    const data = await response.json();
-    if (!data.success || !data.data) return [];
-
-    return data.data.map((point: { date: string; close: number }) => ({
-      date: point.date,
-      close: point.close,
-    }));
-  } catch (error) {
-    console.error(`Failed to fetch historical data for ${symbol}:`, error);
-    return [];
-  }
-}
-
-/**
- * Fetch S&P 500 (SPY) return for a given date range
+ * Fetch S&P 500 (SPY) return for a given date range.
  */
 export async function fetchSP500ReturnForPeriod(
   startDate: string,
   endDate: string,
-  baseUrl: string
 ): Promise<number> {
   try {
-    const data = await fetchStockHistoricalDataServer('SPY', startDate, endDate, baseUrl);
+    const result = await fetchYahooHistorical({
+      symbol: 'SPY',
+      startDate,
+      endDate,
+    });
 
-    if (data.length < 2) {
-      // Not enough data, return average market return
+    if (!result.ok || result.data.length < 2) {
       return 0;
     }
 
-    const startPrice = data[0].close;
-    const endPrice = data[data.length - 1].close;
+    const startPrice = result.data[0].close;
+    const endPrice = result.data[result.data.length - 1].close;
+    if (startPrice === 0) return 0;
 
     return ((endPrice - startPrice) / startPrice) * 100;
   } catch (error) {
@@ -65,15 +44,15 @@ export async function fetchSP500ReturnForPeriod(
 }
 
 /**
- * Calculate portfolio return for a given date range using real Yahoo Finance data
+ * Calculate weighted portfolio return for a given date range using
+ * real Yahoo Finance data. Skips any holding whose Yahoo data comes
+ * back empty so a single broken ticker doesn't zero the whole result.
  */
 export async function calculatePortfolioReturnForPeriod(
   portfolio: Portfolio,
   startDate: string,
   endDate: string,
-  baseUrl: string
 ): Promise<number> {
-  // Get all stocks with allocations
   const stocks = portfolio.players
     .filter((p) => p.asset?.symbol)
     .map((p) => ({
@@ -85,42 +64,42 @@ export async function calculatePortfolioReturnForPeriod(
     return 0;
   }
 
-  // Fetch historical data for all stocks
   const stockReturns = await Promise.all(
     stocks.map(async (stock) => {
-      const data = await fetchStockHistoricalDataServer(
-        stock.symbol,
+      const result = await fetchYahooHistorical({
+        symbol: stock.symbol,
         startDate,
         endDate,
-        baseUrl
-      );
+      });
 
-      if (data.length < 2) {
+      if (!result.ok || result.data.length < 2) {
         return { symbol: stock.symbol, allocation: stock.allocation, return: 0 };
       }
 
-      const startPrice = data[0].close;
-      const endPrice = data[data.length - 1].close;
+      const startPrice = result.data[0].close;
+      const endPrice = result.data[result.data.length - 1].close;
+      if (startPrice === 0) {
+        return { symbol: stock.symbol, allocation: stock.allocation, return: 0 };
+      }
       const returnPct = ((endPrice - startPrice) / startPrice) * 100;
 
       return { symbol: stock.symbol, allocation: stock.allocation, return: returnPct };
-    })
+    }),
   );
 
-  // Calculate weighted return
   const totalAllocation = stockReturns.reduce((sum, s) => sum + s.allocation, 0);
   if (totalAllocation === 0) return 0;
 
   const weightedReturn = stockReturns.reduce(
     (sum, s) => sum + (s.return * s.allocation) / totalAllocation,
-    0
+    0,
   );
 
   return weightedReturn;
 }
 
 /**
- * Get the number of days for a timeframe
+ * Get the number of days for a timeframe shorthand.
  */
 export function getTimeframeDays(timeframe: ChallengeTimeframe): number {
   switch (timeframe) {
@@ -138,7 +117,7 @@ export function getTimeframeDays(timeframe: ChallengeTimeframe): number {
 }
 
 /**
- * Format date to YYYY-MM-DD string
+ * Format Date → YYYY-MM-DD.
  */
 export function formatDateString(date: Date): string {
   return date.toISOString().split('T')[0];
