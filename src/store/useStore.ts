@@ -57,6 +57,10 @@ interface AppState {
   completedChallenges: Challenge[];
   challengesLoading: boolean;
 
+  // Training / lesson completion state — set of completed lesson IDs
+  lessonCompletions: Set<string>;
+  lessonCompletionsLoaded: boolean;
+
   // Actions - Auth
   login: (identifier: string, password: string) => Promise<AuthResponse>;
   register: (username: string, email: string, password: string) => Promise<AuthResponse>;
@@ -98,6 +102,20 @@ interface AppState {
   getActiveChallengesCount: () => number;
   canCreateChallenge: (type: ChallengeType) => { canCreate: boolean; reason?: string };
 
+  // Actions - Training / lesson completion
+  loadLessonCompletions: () => Promise<void>;
+  markLessonComplete: (
+    lessonId: string,
+    moduleId: string,
+  ) => Promise<{
+    success: boolean;
+    awarded: boolean;
+    xpAwarded?: number;
+    newLevel?: number;
+    leveledUp?: boolean;
+    error?: string;
+  }>;
+
   // Actions - Data loading
   loadData: () => Promise<void>;
   refreshPortfolios: () => Promise<void>;
@@ -112,6 +130,8 @@ export const useStore = create<AppState>((set, get) => ({
   publicPortfolios: [],
   activities: [],
   notifications: [],
+  lessonCompletions: new Set<string>(),
+  lessonCompletionsLoaded: false,
 
   // Challenge initial state
   challenges: [],
@@ -188,6 +208,8 @@ export const useStore = create<AppState>((set, get) => ({
       isAuthenticated: false,
       portfolios: [],
       notifications: [],
+      lessonCompletions: new Set<string>(),
+      lessonCompletionsLoaded: false,
     });
   },
 
@@ -736,6 +758,100 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   // Data loading
+  loadLessonCompletions: async () => {
+    const { currentUser } = get();
+    if (!currentUser) {
+      set({ lessonCompletions: new Set<string>(), lessonCompletionsLoaded: true });
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/training/completions?userId=${currentUser.id}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.completions)) {
+        set({
+          lessonCompletions: new Set<string>(data.completions.map((c: { lessonId: string }) => c.lessonId)),
+          lessonCompletionsLoaded: true,
+        });
+      } else {
+        set({ lessonCompletionsLoaded: true });
+      }
+    } catch (error) {
+      console.error('Failed to load lesson completions:', error);
+      set({ lessonCompletionsLoaded: true });
+    }
+  },
+
+  markLessonComplete: async (lessonId: string, moduleId: string) => {
+    const { currentUser, lessonCompletions } = get();
+    if (!currentUser) {
+      return { success: false, awarded: false, error: 'Not logged in' };
+    }
+
+    /* Optimistically mark complete in local state so the UI doesn't lag
+       behind the network round-trip. If the server fails, we roll back. */
+    const alreadyComplete = lessonCompletions.has(lessonId);
+    if (!alreadyComplete) {
+      const optimistic = new Set(lessonCompletions);
+      optimistic.add(lessonId);
+      set({ lessonCompletions: optimistic });
+    }
+
+    try {
+      const res = await fetch('/api/training/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          lessonId,
+          moduleId,
+        }),
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        /* Rollback optimistic update on failure. */
+        if (!alreadyComplete) {
+          const rollback = new Set(get().lessonCompletions);
+          rollback.delete(lessonId);
+          set({ lessonCompletions: rollback });
+        }
+        return { success: false, awarded: false, error: data.error };
+      }
+
+      /* Bump currentUser xp/level locally on first-time completion so
+         sidebar / topbar / dashboard reflect the award immediately. */
+      if (data.awarded && data.newXp !== undefined) {
+        const cur = get().currentUser;
+        if (cur) {
+          set({
+            currentUser: {
+              ...cur,
+              xp: data.newXp,
+              level: data.newLevel ?? cur.level,
+            },
+          });
+        }
+      }
+
+      return {
+        success: true,
+        awarded: !!data.awarded,
+        xpAwarded: data.xpAwarded,
+        newLevel: data.newLevel,
+        leveledUp: !!data.leveledUp,
+      };
+    } catch (error) {
+      console.error('Failed to mark lesson complete:', error);
+      if (!alreadyComplete) {
+        const rollback = new Set(get().lessonCompletions);
+        rollback.delete(lessonId);
+        set({ lessonCompletions: rollback });
+      }
+      return { success: false, awarded: false, error: 'Network error' };
+    }
+  },
+
   loadData: async () => {
     const sessionUserId = getStoredSession();
 
@@ -763,9 +879,13 @@ export const useStore = create<AppState>((set, get) => ({
       const publicRes = await fetch('/api/portfolios');
       const publicData = await publicRes.json();
 
-      // Fetch challenges
-      const challengesRes = await fetch(`/api/challenges?userId=${sessionUserId}`);
+      // Fetch challenges + training completions in parallel
+      const [challengesRes, completionsRes] = await Promise.all([
+        fetch(`/api/challenges?userId=${sessionUserId}`),
+        fetch(`/api/training/completions?userId=${sessionUserId}`),
+      ]);
       const challengesData = await challengesRes.json();
+      const completionsData = await completionsRes.json().catch(() => ({ success: false }));
 
       set({
         currentUser: userData.user,
@@ -777,6 +897,10 @@ export const useStore = create<AppState>((set, get) => ({
         pendingChallenges: challengesData.success ? challengesData.pendingInvites : [],
         activeChallenges: challengesData.success ? challengesData.activeChallenges : [],
         completedChallenges: challengesData.success ? challengesData.completedChallenges : [],
+        lessonCompletions: completionsData.success
+          ? new Set<string>(completionsData.completions.map((c: { lessonId: string }) => c.lessonId))
+          : new Set<string>(),
+        lessonCompletionsLoaded: true,
       });
     } catch (error) {
       console.error('Failed to load data:', error);

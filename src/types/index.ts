@@ -40,6 +40,18 @@ export interface Challenge {
 export const CHALLENGE_XP = { VS_SP500: 100, VS_USER: 200 };
 export const MAX_ACTIVE_CHALLENGES = 3;
 
+// Training / lesson completion
+export const LESSON_COMPLETION_XP = 100;
+
+export interface LessonCompletion {
+  id: string;
+  userId: string;
+  lessonId: string;
+  moduleId: string;
+  completedAt: string;
+  xpAwarded: number;
+}
+
 export const CHALLENGE_TIMEFRAMES: { value: ChallengeTimeframe; label: string; days: number }[] = [
   { value: '1W', label: '1 Week', days: 7 },
   { value: '2W', label: '2 Weeks', days: 14 },

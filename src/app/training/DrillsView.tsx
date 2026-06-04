@@ -11,11 +11,14 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { COACHING_MODULES, CoachingModule, CoachingLesson } from '@/data/coaching-content';
 import { Icon } from '@/components/stadium/Icon';
+import { useStore } from '@/store/useStore';
 
 interface DrillsViewProps {
   onSwitchToReference?: () => void;
 }
 
+/* localStorage key kept for backwards-compat: anonymous (logged-out)
+   users still get device-local progress tracking, just no XP. */
 const COMPLETED_KEY = 'training:completed-lessons';
 
 export function DrillsView({ onSwitchToReference }: DrillsViewProps) {
@@ -24,18 +27,32 @@ export function DrillsView({ onSwitchToReference }: DrillsViewProps) {
   const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
   const [showQuizResults, setShowQuizResults] = useState<Record<string, boolean>>({});
 
-  /* Lesson completion persisted to localStorage so users keep their
-     progress across sessions. We gate writes on isHydrated so the
-     initial empty state doesn't wipe stored progress on mount. */
-  const [completedLessons, setCompletedLessons] = useState<Set<string>>(new Set());
-  const [isHydrated, setIsHydrated] = useState(false);
+  /* Completion state has two paths:
+     1. Logged-in users → server-backed via store; XP awarded on each
+        first-time completion. Persists across devices.
+     2. Anonymous users → localStorage; device-local; no XP. Mirrors
+        the prior behavior so the unauthenticated demo flow still works.
+     The two paths are unified into a single `isCompleted` predicate so
+     the render code below doesn't have to know which path is active. */
+  const currentUser = useStore((s) => s.currentUser);
+  const storeCompletions = useStore((s) => s.lessonCompletions);
+  const lessonCompletionsLoaded = useStore((s) => s.lessonCompletionsLoaded);
+  const loadLessonCompletions = useStore((s) => s.loadLessonCompletions);
+  const markLessonComplete = useStore((s) => s.markLessonComplete);
 
+  const [localCompletions, setLocalCompletions] = useState<Set<string>>(new Set());
+  const [isHydrated, setIsHydrated] = useState(false);
+  const [pendingMark, setPendingMark] = useState<string | null>(null);
+  const [xpToast, setXpToast] = useState<{ xp: number; leveledUp: boolean } | null>(null);
+
+  /* Hydrate anon localStorage. Runs once on mount; later writes are
+     gated on isHydrated so the initial empty state doesn't wipe data. */
   useEffect(() => {
     try {
       const raw = localStorage.getItem(COMPLETED_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) setCompletedLessons(new Set(parsed));
+        if (Array.isArray(parsed)) setLocalCompletions(new Set(parsed));
       }
     } catch {
       /* corrupt JSON or storage disabled — fall back to empty set */
@@ -43,38 +60,67 @@ export function DrillsView({ onSwitchToReference }: DrillsViewProps) {
     setIsHydrated(true);
   }, []);
 
+  /* Persist anon localStorage when the local set changes. Skipped for
+     logged-in users since the server is canonical there. */
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!isHydrated || currentUser) return;
     try {
-      localStorage.setItem(COMPLETED_KEY, JSON.stringify(Array.from(completedLessons)));
+      localStorage.setItem(COMPLETED_KEY, JSON.stringify(Array.from(localCompletions)));
     } catch {
       /* storage full / disabled — silently ignore */
     }
-  }, [completedLessons, isHydrated]);
+  }, [localCompletions, isHydrated, currentUser]);
 
-  const isCompleted = (lessonId: string) => completedLessons.has(lessonId);
+  /* If the user is logged in but the store hasn't loaded yet (e.g. they
+     navigated directly to /training before loadData finished), kick off
+     a fetch. loadData also does this; this is the redundancy that makes
+     deep-linking robust. */
+  useEffect(() => {
+    if (currentUser && !lessonCompletionsLoaded) {
+      loadLessonCompletions();
+    }
+  }, [currentUser, lessonCompletionsLoaded, loadLessonCompletions]);
 
-  const markCompleted = (lessonId: string) => {
-    setCompletedLessons((prev) => {
-      if (prev.has(lessonId)) return prev;
-      const next = new Set(prev);
-      next.add(lessonId);
-      return next;
-    });
-  };
+  /* Dismiss the XP toast after 3.2s. */
+  useEffect(() => {
+    if (!xpToast) return;
+    const t = setTimeout(() => setXpToast(null), 3200);
+    return () => clearTimeout(t);
+  }, [xpToast]);
 
-  const toggleCompleted = (lessonId: string) => {
-    setCompletedLessons((prev) => {
-      const next = new Set(prev);
-      if (next.has(lessonId)) next.delete(lessonId);
-      else next.add(lessonId);
-      return next;
-    });
+  const completions = currentUser ? storeCompletions : localCompletions;
+  const isCompleted = (lessonId: string) => completions.has(lessonId);
+
+  /* Mark a lesson complete. One-way: completion can't be undone (XP
+     would be farmable otherwise). Anonymous users fall through to the
+     local set. Returns whether anything changed so callers can decide
+     whether to also navigate. */
+  const handleMarkComplete = async (lessonId: string, moduleId: string) => {
+    if (isCompleted(lessonId)) return;
+
+    if (!currentUser) {
+      setLocalCompletions((prev) => {
+        const next = new Set(prev);
+        next.add(lessonId);
+        return next;
+      });
+      return;
+    }
+
+    setPendingMark(lessonId);
+    try {
+      const result = await markLessonComplete(lessonId, moduleId);
+      if (result.success && result.awarded && result.xpAwarded) {
+        setXpToast({ xp: result.xpAwarded, leveledUp: !!result.leveledUp });
+      }
+    } finally {
+      setPendingMark(null);
+    }
   };
 
   const moduleProgress = (module: CoachingModule) => {
     if (module.lessons.length === 0) return 0;
-    const done = module.lessons.filter((l) => completedLessons.has(l.id)).length;
+    const done = module.lessons.filter((l) => completions.has(l.id)).length;
     return (done / module.lessons.length) * 100;
   };
 
@@ -224,7 +270,7 @@ export function DrillsView({ onSwitchToReference }: DrillsViewProps) {
   };
 
   const totalLessons = COACHING_MODULES.reduce((acc, m) => acc + m.lessons.length, 0);
-  const totalCompleted = completedLessons.size;
+  const totalCompleted = completions.size;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -1195,51 +1241,99 @@ export function DrillsView({ onSwitchToReference }: DrillsViewProps) {
                     <div style={{ minWidth: 1 }} />
                   )}
 
-                  {/* Middle: Mark complete toggle */}
-                  <button
-                    type="button"
-                    onClick={() => toggleCompleted(selectedLesson.id)}
-                    style={{
-                      padding: '8px 16px',
-                      fontSize: 12,
-                      fontFamily: 'var(--font-display)',
-                      fontWeight: 600,
-                      background: done ? 'var(--pitch-tint)' : 'var(--surface-2)',
-                      color: done ? 'var(--pitch)' : 'var(--text)',
-                      border: '1px solid ' + (done ? 'oklch(0.72 0.21 145 / 0.4)' : 'var(--line)'),
-                      borderRadius: 6,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      transition: 'background .12s, border-color .12s, color .12s',
-                    }}
-                  >
-                    {done ? (
-                      <>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M5 13l4 4L19 7" />
-                        </svg>
-                        Completed
-                      </>
-                    ) : (
-                      <>Mark complete</>
-                    )}
-                  </button>
+                  {/* Middle: Mark complete (one-way; completion can't be
+                      undone because XP would be farmable). Once done,
+                      shows a non-interactive badge. While the server
+                      request is in flight, a spinner shows. */}
+                  {done ? (
+                    <div
+                      style={{
+                        padding: '8px 16px',
+                        fontSize: 12,
+                        fontFamily: 'var(--font-display)',
+                        fontWeight: 600,
+                        background: 'var(--pitch-tint)',
+                        color: 'var(--pitch)',
+                        border: '1px solid oklch(0.72 0.21 145 / 0.4)',
+                        borderRadius: 6,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M5 13l4 4L19 7" />
+                      </svg>
+                      Completed
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleMarkComplete(selectedLesson.id, selectedModule.id)}
+                      disabled={pendingMark === selectedLesson.id}
+                      style={{
+                        padding: '8px 16px',
+                        fontSize: 12,
+                        fontFamily: 'var(--font-display)',
+                        fontWeight: 600,
+                        background: 'var(--surface-2)',
+                        color: 'var(--text)',
+                        border: '1px solid var(--line)',
+                        borderRadius: 6,
+                        cursor: pendingMark === selectedLesson.id ? 'default' : 'pointer',
+                        opacity: pendingMark === selectedLesson.id ? 0.6 : 1,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        transition: 'background .12s, border-color .12s, color .12s',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (pendingMark !== selectedLesson.id) {
+                          e.currentTarget.style.borderColor = 'var(--line-2)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--line)';
+                      }}
+                    >
+                      {pendingMark === selectedLesson.id ? 'Saving…' : 'Mark complete'}
+                      {currentUser && pendingMark !== selectedLesson.id && (
+                        <span
+                          className="mono"
+                          style={{
+                            fontSize: 9,
+                            letterSpacing: '0.08em',
+                            color: 'var(--whistle)',
+                            marginLeft: 4,
+                          }}
+                        >
+                          +100 XP
+                        </span>
+                      )}
+                    </button>
+                  )}
 
-                  {/* Right: Next lesson (or finish drill) — also marks current complete */}
+                  {/* Right: Next lesson (or finish drill) — also marks
+                      current complete in the same click. Async; awaits
+                      the server before navigating so XP toast can fire
+                      on the lesson the user just finished. */}
                   <button
                     type="button"
-                    onClick={() => {
-                      markCompleted(selectedLesson.id);
+                    onClick={async () => {
+                      await handleMarkComplete(selectedLesson.id, selectedModule.id);
                       if (next) {
                         goToLesson(next);
                       } else {
                         handleBackToLessons();
                       }
                     }}
+                    disabled={pendingMark === selectedLesson.id}
                     className="stadium-btn stadium-btn-primary"
-                    style={{ padding: '8px 14px', fontSize: 12 }}
+                    style={{
+                      padding: '8px 14px',
+                      fontSize: 12,
+                      opacity: pendingMark === selectedLesson.id ? 0.7 : 1,
+                    }}
                   >
                     {next ? (
                       <>
@@ -1331,6 +1425,67 @@ export function DrillsView({ onSwitchToReference }: DrillsViewProps) {
           </div>
         </motion.div>
       )}
+
+      {/* XP toast — slides in from the bottom-right when a lesson is
+          marked complete server-side. Auto-dismisses after 3.2s. */}
+      <AnimatePresence>
+        {xpToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 30, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+            className="stadium-card"
+            style={{
+              position: 'fixed',
+              bottom: 24,
+              right: 24,
+              zIndex: 50,
+              padding: '14px 18px',
+              minWidth: 220,
+              background: 'var(--pitch-tint)',
+              borderColor: 'oklch(0.72 0.21 145 / 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              pointerEvents: 'none',
+              boxShadow: '0 10px 30px -10px oklch(0.14 0.05 145 / 0.5)',
+            }}
+          >
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                background: 'var(--pitch)',
+                color: 'oklch(0.14 0.05 145)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <Icon.Whistle size={18} />
+            </div>
+            <div>
+              <div className="kicker" style={{ color: 'var(--pitch)' }}>
+                {xpToast.leveledUp ? 'LEVEL UP!' : 'LESSON COMPLETE'}
+              </div>
+              <div
+                className="display num"
+                style={{
+                  fontSize: 18,
+                  letterSpacing: '-0.02em',
+                  marginTop: 2,
+                  color: 'var(--text)',
+                }}
+              >
+                +{xpToast.xp} XP
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
