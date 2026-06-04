@@ -10,13 +10,6 @@ import {
 // Secret key for cron authentication (set in environment variables)
 const CRON_SECRET = process.env.CRON_SECRET || '';
 
-// Get base URL for internal API calls
-function getBaseUrl(request: NextRequest): string {
-  const host = request.headers.get('host') || 'localhost:3000';
-  const protocol = host.includes('localhost') ? 'http' : 'https';
-  return `${protocol}://${host}`;
-}
-
 /**
  * Cron endpoint for auto-settling challenges
  *
@@ -47,8 +40,6 @@ export async function GET(request: NextRequest) {
         );
       }
     }
-
-    const baseUrl = getBaseUrl(request);
 
     // Find all active challenges that have ended
     const { data: challenges, error: fetchError } = await supabase

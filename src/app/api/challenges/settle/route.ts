@@ -345,7 +345,14 @@ export async function GET(request: NextRequest) {
 
     // If autoSettle is true, automatically settle all pending challenges
     if (autoSettle && challengesToSettle && challengesToSettle.length > 0) {
-      // Call the POST endpoint internally for each challenge
+      /* WARNING: This self-POSTs back to /api/challenges/settle for
+         every pending challenge. On Vercel preview deployments behind
+         SSO this hits a 401 wall because the server-to-server fetch
+         has no auth cookie, same trap that the live-returns and Yahoo
+         calls used to fall into. No production callers right now, so
+         leaving as-is. Real fix is to factor the per-challenge logic
+         out of POST into a function the autoSettle path can call
+         directly. */
       const baseUrl = getBaseUrl(request);
 
       const settleResults = await Promise.all(

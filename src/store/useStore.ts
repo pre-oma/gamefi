@@ -773,31 +773,24 @@ export const useStore = create<AppState>((set, get) => ({
   // Data loading
   loadLiveReturns: async () => {
     const { currentUser, challenges, activeChallenges } = get();
-    if (!currentUser || activeChallenges.length === 0) {
-      console.log('[live] skip — user:', !!currentUser, 'active:', activeChallenges.length);
-      return;
-    }
+    if (!currentUser || activeChallenges.length === 0) return;
 
     try {
-      console.log('[live] fetching for active ids:', activeChallenges.map((c) => c.id));
       const res = await fetch(`/api/challenges/live?userId=${currentUser.id}`);
       const data = await res.json();
-      if (!data.success || !data.live) {
-        console.log('[live] bad response:', data);
-        return;
-      }
+      if (!data.success || !data.live) return;
 
       const liveMap: Record<
         string,
         { challengerReturnPercent: number; opponentReturnPercent: number }
       > = data.live;
-      console.log('[live] map keys:', Object.keys(liveMap));
 
-      let matched = 0;
+      /* Merge the live numbers into both the master `challenges` array
+         and the derived `activeChallenges` slice so any consumer
+         (Fixtures page, Dashboard Live Fixtures) picks them up. */
       const merge = (c: Challenge): Challenge => {
         const live = liveMap[c.id];
         if (!live) return c;
-        matched++;
         return {
           ...c,
           challengerReturnPercent: live.challengerReturnPercent,
@@ -805,13 +798,9 @@ export const useStore = create<AppState>((set, get) => ({
         };
       };
 
-      const nextChallenges = challenges.map(merge);
-      const nextActive = activeChallenges.map(merge);
-      console.log('[live] matched', matched, 'merges. sample updated active:', nextActive[0]);
-
       set({
-        challenges: nextChallenges,
-        activeChallenges: nextActive,
+        challenges: challenges.map(merge),
+        activeChallenges: activeChallenges.map(merge),
       });
     } catch (error) {
       console.error('Failed to load live returns:', error);

@@ -18,28 +18,17 @@ export default function ChallengesPage() {
     completedChallenges,
     challengesLoading,
     loadChallenges,
-    loadLiveReturns,
     getActiveChallengesCount,
   } = useStore();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
 
+  /* loadChallenges internally chains loadLiveReturns once active
+     fixtures exist, so we don't need a separate effect for live
+     percentages — keeping both used to race and clobber the merge. */
   useEffect(() => {
     if (isAuthenticated) loadChallenges();
   }, [isAuthenticated, loadChallenges]);
-
-  /* Once challenges are loaded, fan out live-return fetches for any
-     in-progress fixtures. Re-fires when the active set changes so
-     newly-accepted challenges populate immediately. activeChallenges
-     is intentionally not in the dep array — using its length avoids
-     re-running on every store mutation while still re-firing when
-     the set grows/shrinks. */
-  useEffect(() => {
-    if (isAuthenticated && activeChallenges.length > 0) {
-      loadLiveReturns();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, activeChallenges.length, loadLiveReturns]);
 
   const stats = useMemo(() => {
     const wins = completedChallenges.filter((c) => c.winnerId === currentUser?.id).length;
