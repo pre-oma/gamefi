@@ -6,7 +6,7 @@
    CTA that used to deep-link to /learn now calls onSwitchToReference to
    flip the parent tab instead. */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { COACHING_MODULES, CoachingModule, CoachingLesson } from '@/data/coaching-content';
@@ -16,11 +16,82 @@ interface DrillsViewProps {
   onSwitchToReference?: () => void;
 }
 
+const COMPLETED_KEY = 'training:completed-lessons';
+
 export function DrillsView({ onSwitchToReference }: DrillsViewProps) {
   const [selectedModule, setSelectedModule] = useState<CoachingModule | null>(null);
   const [selectedLesson, setSelectedLesson] = useState<CoachingLesson | null>(null);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
   const [showQuizResults, setShowQuizResults] = useState<Record<string, boolean>>({});
+
+  /* Lesson completion persisted to localStorage so users keep their
+     progress across sessions. We gate writes on isHydrated so the
+     initial empty state doesn't wipe stored progress on mount. */
+  const [completedLessons, setCompletedLessons] = useState<Set<string>>(new Set());
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(COMPLETED_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setCompletedLessons(new Set(parsed));
+      }
+    } catch {
+      /* corrupt JSON or storage disabled — fall back to empty set */
+    }
+    setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    try {
+      localStorage.setItem(COMPLETED_KEY, JSON.stringify(Array.from(completedLessons)));
+    } catch {
+      /* storage full / disabled — silently ignore */
+    }
+  }, [completedLessons, isHydrated]);
+
+  const isCompleted = (lessonId: string) => completedLessons.has(lessonId);
+
+  const markCompleted = (lessonId: string) => {
+    setCompletedLessons((prev) => {
+      if (prev.has(lessonId)) return prev;
+      const next = new Set(prev);
+      next.add(lessonId);
+      return next;
+    });
+  };
+
+  const toggleCompleted = (lessonId: string) => {
+    setCompletedLessons((prev) => {
+      const next = new Set(prev);
+      if (next.has(lessonId)) next.delete(lessonId);
+      else next.add(lessonId);
+      return next;
+    });
+  };
+
+  const moduleProgress = (module: CoachingModule) => {
+    if (module.lessons.length === 0) return 0;
+    const done = module.lessons.filter((l) => completedLessons.has(l.id)).length;
+    return (done / module.lessons.length) * 100;
+  };
+
+  /* Smooth-scroll helper used by lesson navigation so a long lesson
+     doesn't leave the user mid-scroll when they jump to the next one. */
+  const scrollToTop = () => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const goToLesson = (lesson: CoachingLesson) => {
+    setSelectedLesson(lesson);
+    setQuizAnswers({});
+    setShowQuizResults({});
+    scrollToTop();
+  };
 
   const handleBackToModules = () => {
     setSelectedModule(null);
@@ -153,6 +224,7 @@ export function DrillsView({ onSwitchToReference }: DrillsViewProps) {
   };
 
   const totalLessons = COACHING_MODULES.reduce((acc, m) => acc + m.lessons.length, 0);
+  const totalCompleted = completedLessons.size;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -173,7 +245,7 @@ export function DrillsView({ onSwitchToReference }: DrillsViewProps) {
             <div>
               <div className="kicker">LICENSE PROGRESS</div>
               <div className="mono num" style={{ fontSize: 13, fontWeight: 700, marginTop: 2 }}>
-                0 / {totalLessons} DRILLS
+                {totalCompleted} / {totalLessons} DRILLS
               </div>
             </div>
           </div>
@@ -336,9 +408,10 @@ export function DrillsView({ onSwitchToReference }: DrillsViewProps) {
                     : diff === 'intermediate'
                     ? 'pill-whistle'
                     : 'pill-red';
-                const progressPct = 0;
+                const progressPct = moduleProgress(module);
+                const doneCount = module.lessons.filter((l) => isCompleted(l.id)).length;
                 const status: 'locked' | 'in-progress' | 'done' =
-                  progressPct === 0 ? 'locked' : progressPct === 100 ? 'done' : 'in-progress';
+                  progressPct === 0 ? 'locked' : progressPct >= 100 ? 'done' : 'in-progress';
                 return (
                   <div
                     key={module.id}
@@ -410,7 +483,13 @@ export function DrillsView({ onSwitchToReference }: DrillsViewProps) {
                       }}
                     >
                       <div className="mono" style={{ fontSize: 10, color: 'var(--text-mute)', letterSpacing: '0.1em' }}>
-                        {module.lessons.length} LESSONS
+                        {doneCount > 0 ? (
+                          <span style={{ color: status === 'done' ? 'var(--pitch)' : 'var(--whistle)' }}>
+                            {doneCount}/{module.lessons.length} DONE
+                          </span>
+                        ) : (
+                          <>{module.lessons.length} LESSONS</>
+                        )}
                       </div>
                       <Icon.Arrow size={14} style={{ color: 'var(--pitch)' }} />
                     </div>
@@ -595,72 +674,82 @@ export function DrillsView({ onSwitchToReference }: DrillsViewProps) {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {selectedModule.lessons.map((lesson, index) => (
-                  <motion.button
-                    key={lesson.id}
-                    type="button"
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    onClick={() => setSelectedLesson(lesson)}
-                    className="stadium-card"
-                    style={{
-                      padding: '12px 16px',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      color: 'inherit',
-                      transition: 'border-color .15s ease',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 14,
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--pitch)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--line)';
-                    }}
-                  >
-                    <div
-                      className="display num"
+                {selectedModule.lessons.map((lesson, index) => {
+                  const done = isCompleted(lesson.id);
+                  return (
+                    <motion.button
+                      key={lesson.id}
+                      type="button"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      onClick={() => setSelectedLesson(lesson)}
+                      className="stadium-card"
                       style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 6,
-                        background: 'var(--surface-2)',
-                        border: '1px solid var(--line)',
+                        padding: '12px 16px',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        color: 'inherit',
+                        transition: 'border-color .15s ease',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 13,
-                        letterSpacing: '-0.02em',
-                        color: 'var(--text-dim)',
-                        flexShrink: 0,
+                        gap: 14,
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--pitch)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--line)';
                       }}
                     >
-                      {String(index + 1).padStart(2, '0')}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
                       <div
-                        className="display"
+                        className="display num"
                         style={{
-                          fontSize: 14,
-                          letterSpacing: '-0.01em',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
+                          width: 32,
+                          height: 32,
+                          borderRadius: 6,
+                          background: done ? 'var(--pitch)' : 'var(--surface-2)',
+                          border: '1px solid ' + (done ? 'var(--pitch-deep)' : 'var(--line)'),
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 13,
+                          letterSpacing: '-0.02em',
+                          color: done ? 'oklch(0.14 0.05 145)' : 'var(--text-dim)',
+                          flexShrink: 0,
                         }}
                       >
-                        {lesson.title}
+                        {done ? (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : (
+                          String(index + 1).padStart(2, '0')
+                        )}
                       </div>
-                      <div className="mono" style={{ fontSize: 10, color: 'var(--text-mute)', marginTop: 2, letterSpacing: '0.04em' }}>
-                        {lesson.keyPoints?.length || 0} KEY POINTS
-                        {lesson.quiz && ` · ${lesson.quiz.length} QUIZ Q${lesson.quiz.length > 1 ? 'S' : ''}`}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          className="display"
+                          style={{
+                            fontSize: 14,
+                            letterSpacing: '-0.01em',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {lesson.title}
+                        </div>
+                        <div className="mono" style={{ fontSize: 10, color: 'var(--text-mute)', marginTop: 2, letterSpacing: '0.04em' }}>
+                          {done && <span style={{ color: 'var(--pitch)', marginRight: 6 }}>✓ COMPLETE</span>}
+                          {lesson.keyPoints?.length || 0} KEY POINTS
+                          {lesson.quiz && ` · ${lesson.quiz.length} QUIZ Q${lesson.quiz.length > 1 ? 'S' : ''}`}
+                        </div>
                       </div>
-                    </div>
-                    <Icon.Arrow size={14} style={{ color: 'var(--pitch)', flexShrink: 0 }} />
-                  </motion.button>
-                ))}
+                      <Icon.Arrow size={14} style={{ color: 'var(--pitch)', flexShrink: 0 }} />
+                    </motion.button>
+                  );
+                })}
               </div>
             </div>
           </motion.div>
@@ -973,19 +1062,24 @@ export function DrillsView({ onSwitchToReference }: DrillsViewProps) {
                 )}
 
                 <div className="stadium-card" style={{ padding: 14 }}>
-                  <div className="kicker" style={{ marginBottom: 8 }}>IN THIS DRILL</div>
+                  <div
+                    className="flex items-center justify-between"
+                    style={{ marginBottom: 8 }}
+                  >
+                    <div className="kicker">IN THIS DRILL</div>
+                    <div className="mono" style={{ fontSize: 9, color: 'var(--text-mute)', letterSpacing: '0.1em' }}>
+                      {selectedModule.lessons.filter((l) => isCompleted(l.id)).length}/{selectedModule.lessons.length}
+                    </div>
+                  </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {selectedModule.lessons.map((lesson, index) => {
                       const isActive = selectedLesson.id === lesson.id;
+                      const done = isCompleted(lesson.id);
                       return (
                         <button
                           key={lesson.id}
                           type="button"
-                          onClick={() => {
-                            setSelectedLesson(lesson);
-                            setQuizAnswers({});
-                            setShowQuizResults({});
-                          }}
+                          onClick={() => goToLesson(lesson)}
                           style={{
                             width: '100%',
                             textAlign: 'left',
@@ -1022,8 +1116,8 @@ export function DrillsView({ onSwitchToReference }: DrillsViewProps) {
                               width: 18,
                               height: 18,
                               borderRadius: 3,
-                              background: isActive ? 'var(--pitch)' : 'var(--surface-2)',
-                              color: isActive ? 'oklch(0.14 0.05 145)' : 'var(--text-dim)',
+                              background: done || isActive ? 'var(--pitch)' : 'var(--surface-2)',
+                              color: done || isActive ? 'oklch(0.14 0.05 145)' : 'var(--text-dim)',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
@@ -1032,13 +1126,20 @@ export function DrillsView({ onSwitchToReference }: DrillsViewProps) {
                               flexShrink: 0,
                             }}
                           >
-                            {index + 1}
+                            {done ? (
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M5 13l4 4L19 7" />
+                              </svg>
+                            ) : (
+                              index + 1
+                            )}
                           </span>
                           <span
                             style={{
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
                               whiteSpace: 'nowrap',
+                              flex: 1,
                             }}
                           >
                             {lesson.title}
@@ -1050,6 +1151,126 @@ export function DrillsView({ onSwitchToReference }: DrillsViewProps) {
                 </div>
               </div>
             </div>
+
+            {/* Lesson navigation footer — Prev / Mark complete / Next.
+                Renders after the lesson + side-rail grid so it spans full width. */}
+            {(() => {
+              const idx = selectedModule.lessons.findIndex((l) => l.id === selectedLesson.id);
+              const prev = idx > 0 ? selectedModule.lessons[idx - 1] : null;
+              const next = idx < selectedModule.lessons.length - 1 ? selectedModule.lessons[idx + 1] : null;
+              const done = isCompleted(selectedLesson.id);
+
+              return (
+                <div
+                  className="stadium-card flex flex-wrap items-center"
+                  style={{ padding: '12px 18px', gap: 12, justifyContent: 'space-between' }}
+                >
+                  {/* Left: Previous lesson */}
+                  {prev ? (
+                    <button
+                      type="button"
+                      onClick={() => goToLesson(prev)}
+                      className="stadium-btn stadium-btn-ghost"
+                      style={{ padding: '8px 14px', fontSize: 12 }}
+                    >
+                      <Icon.Arrow size={12} style={{ transform: 'rotate(180deg)' }} />
+                      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.1 }}>
+                        <span className="mono" style={{ fontSize: 9, color: 'var(--text-mute)', letterSpacing: '0.1em' }}>
+                          PREVIOUS
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 12,
+                            maxWidth: 180,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {prev.title}
+                        </span>
+                      </span>
+                    </button>
+                  ) : (
+                    <div style={{ minWidth: 1 }} />
+                  )}
+
+                  {/* Middle: Mark complete toggle */}
+                  <button
+                    type="button"
+                    onClick={() => toggleCompleted(selectedLesson.id)}
+                    style={{
+                      padding: '8px 16px',
+                      fontSize: 12,
+                      fontFamily: 'var(--font-display)',
+                      fontWeight: 600,
+                      background: done ? 'var(--pitch-tint)' : 'var(--surface-2)',
+                      color: done ? 'var(--pitch)' : 'var(--text)',
+                      border: '1px solid ' + (done ? 'oklch(0.72 0.21 145 / 0.4)' : 'var(--line)'),
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      transition: 'background .12s, border-color .12s, color .12s',
+                    }}
+                  >
+                    {done ? (
+                      <>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M5 13l4 4L19 7" />
+                        </svg>
+                        Completed
+                      </>
+                    ) : (
+                      <>Mark complete</>
+                    )}
+                  </button>
+
+                  {/* Right: Next lesson (or finish drill) — also marks current complete */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      markCompleted(selectedLesson.id);
+                      if (next) {
+                        goToLesson(next);
+                      } else {
+                        handleBackToLessons();
+                      }
+                    }}
+                    className="stadium-btn stadium-btn-primary"
+                    style={{ padding: '8px 14px', fontSize: 12 }}
+                  >
+                    {next ? (
+                      <>
+                        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.1 }}>
+                          <span className="mono" style={{ fontSize: 9, opacity: 0.75, letterSpacing: '0.1em' }}>
+                            NEXT LESSON
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 12,
+                              maxWidth: 180,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {next.title}
+                          </span>
+                        </span>
+                        <Icon.Arrow size={12} />
+                      </>
+                    ) : (
+                      <>
+                        <Icon.Whistle size={12} />
+                        Finish drill
+                      </>
+                    )}
+                  </button>
+                </div>
+              );
+            })()}
           </motion.div>
         )}
       </AnimatePresence>
