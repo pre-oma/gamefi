@@ -567,7 +567,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Challenge actions
   loadChallenges: async () => {
-    const { currentUser } = get();
+    const { currentUser, loadLiveReturns } = get();
     if (!currentUser) return;
 
     set({ challengesLoading: true });
@@ -584,6 +584,16 @@ export const useStore = create<AppState>((set, get) => ({
           completedChallenges: data.completedChallenges || [],
           challengesLoading: false,
         });
+
+        /* Chain live-return fetch right here so we can't race against
+           the page's own loadLiveReturns effect — whoever runs last
+           wins, and previously loadChallenges (with null returns from
+           the DB) was clobbering loadLiveReturns' merged values. By
+           awaiting the merge in the same sequence, the merged result
+           is always the final state written. */
+        if ((data.activeChallenges || []).length > 0) {
+          await loadLiveReturns();
+        }
       } else {
         set({ challengesLoading: false });
       }
