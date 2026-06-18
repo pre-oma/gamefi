@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ChallengeType,
   ChallengeTimeframe,
   CHALLENGE_XP,
   CHALLENGE_TIMEFRAMES,
+  CHALLENGE_TIMEFRAME_XP_MULT,
   MAX_ACTIVE_CHALLENGES,
 } from '@/types';
 import { useStore } from '@/store/useStore';
@@ -15,6 +16,13 @@ import { Icon } from '@/components/stadium/Icon';
 interface CreateChallengeModalProps {
   isOpen: boolean;
   onClose: () => void;
+}
+
+/* Base XP at stake (before timeframe multiplier). */
+function baseXpForType(type: ChallengeType): number {
+  if (type === 'sp500') return CHALLENGE_XP.VS_SP500;
+  if (type === 'etf') return CHALLENGE_XP.VS_ETF;
+  return CHALLENGE_XP.VS_USER;
 }
 
 export const CreateChallengeModal: React.FC<CreateChallengeModalProps> = ({
@@ -34,26 +42,76 @@ export const CreateChallengeModal: React.FC<CreateChallengeModalProps> = ({
   const [selectedPortfolioId, setSelectedPortfolioId] = useState('');
   const [selectedTimeframe, setSelectedTimeframe] = useState<ChallengeTimeframe>('1W');
   const [opponentPortfolioId, setOpponentPortfolioId] = useState('');
+
+  /* ETF ticker state — separate from the validated symbol so users can
+     type freely without spamming Yahoo lookups. We validate on Add. */
+  const [etfInput, setEtfInput] = useState('');
+  const [etfSymbol, setEtfSymbol] = useState<string | null>(null);
+  const [etfName, setEtfName] = useState<string | null>(null);
+  const [etfValidating, setEtfValidating] = useState(false);
+  const [etfError, setEtfError] = useState<string | null>(null);
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const activeCount = getActiveChallengesCount();
-  const xpAtStake = challengeType === 'sp500' ? CHALLENGE_XP.VS_SP500 : CHALLENGE_XP.VS_USER;
+  const baseXp = baseXpForType(challengeType);
+  const multiplier = CHALLENGE_TIMEFRAME_XP_MULT[selectedTimeframe] ?? 1.0;
+  const totalXp = Math.round(baseXp * multiplier);
   const canCreate = canCreateChallenge(challengeType);
 
   const opponentPortfolios = publicPortfolios.filter((p) => p.userId !== currentUser?.id);
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setChallengeType('sp500');
     setSelectedPortfolioId('');
     setSelectedTimeframe('1W');
     setOpponentPortfolioId('');
+    setEtfInput('');
+    setEtfSymbol(null);
+    setEtfName(null);
+    setEtfValidating(false);
+    setEtfError(null);
     setError(null);
-  };
+  }, []);
 
   const handleClose = () => {
     onClose();
     resetForm();
+  };
+
+  /* Validate ETF ticker against Yahoo before letting the user submit.
+     Mirrors CustomSymbolSearch.tsx — uses /api/yahoo-finance which
+     returns { success, asset } on valid tickers. */
+  const handleAddEtf = useCallback(async () => {
+    const candidate = etfInput.trim().toUpperCase();
+    if (!candidate) return;
+    setEtfValidating(true);
+    setEtfError(null);
+    try {
+      const response = await fetch(
+        `/api/yahoo-finance?symbol=${encodeURIComponent(candidate)}`,
+      );
+      const data = await response.json();
+      if (!data.success || !data.asset) {
+        setEtfError('Symbol not found');
+        return;
+      }
+      setEtfSymbol(data.asset.symbol);
+      setEtfName(data.asset.name);
+      setEtfInput(data.asset.symbol);
+    } catch {
+      setEtfError('Failed to validate symbol');
+    } finally {
+      setEtfValidating(false);
+    }
+  }, [etfInput]);
+
+  const handleClearEtf = () => {
+    setEtfSymbol(null);
+    setEtfName(null);
+    setEtfInput('');
+    setEtfError(null);
   };
 
   const handleCreate = async () => {
@@ -63,6 +121,10 @@ export const CreateChallengeModal: React.FC<CreateChallengeModalProps> = ({
     }
     if (challengeType === 'user' && !opponentPortfolioId) {
       setError('Please pick an opponent squad');
+      return;
+    }
+    if (challengeType === 'etf' && !etfSymbol) {
+      setError('Please enter and validate an ETF ticker');
       return;
     }
 
@@ -76,6 +138,7 @@ export const CreateChallengeModal: React.FC<CreateChallengeModalProps> = ({
       selectedTimeframe,
       opponentPortfolio?.userId,
       opponentPortfolioId || undefined,
+      challengeType === 'etf' ? etfSymbol || undefined : undefined,
     );
 
     setIsLoading(false);
@@ -86,6 +149,13 @@ export const CreateChallengeModal: React.FC<CreateChallengeModalProps> = ({
       setError(result.error || 'Failed to set up the fixture');
     }
   };
+
+  const summaryType =
+    challengeType === 'sp500'
+      ? 'vs S&P 500'
+      : challengeType === 'etf'
+      ? `vs ${etfSymbol || 'ETF'}`
+      : 'vs Manager';
 
   return (
     <Modal
@@ -110,7 +180,7 @@ export const CreateChallengeModal: React.FC<CreateChallengeModalProps> = ({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
               gap: 10,
             }}
           >
@@ -125,6 +195,16 @@ export const CreateChallengeModal: React.FC<CreateChallengeModalProps> = ({
               onClick={() => setChallengeType('sp500')}
             />
             <TypeCard
+              icon="Bolt"
+              code="ETF"
+              pillClass="pill pill-sky"
+              title="vs ETF"
+              sub="Pick any ETF or stock as the benchmark (QQQ, VTI, ARKK…)."
+              xp={CHALLENGE_XP.VS_ETF}
+              active={challengeType === 'etf'}
+              onClick={() => setChallengeType('etf')}
+            />
+            <TypeCard
               icon="Profile"
               code="PVP"
               pillClass="pill pill-pitch"
@@ -136,6 +216,109 @@ export const CreateChallengeModal: React.FC<CreateChallengeModalProps> = ({
             />
           </div>
         </div>
+
+        {/* ETF ticker picker (only for vs ETF) */}
+        {challengeType === 'etf' && (
+          <div>
+            <Label>Benchmark ticker</Label>
+            {etfSymbol ? (
+              <div
+                className="stadium-card"
+                style={{
+                  padding: '10px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 10,
+                  background: 'var(--surface-2)',
+                }}
+              >
+                <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span className="pill pill-sky" style={{ padding: '2px 8px' }}>
+                    {etfSymbol}
+                  </span>
+                  {etfName && (
+                    <span
+                      className="mono"
+                      style={{
+                        fontSize: 11,
+                        color: 'var(--text-dim)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {etfName}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleClearEtf}
+                  className="stadium-btn stadium-btn-ghost"
+                  style={{ padding: '4px 10px', fontSize: 11 }}
+                >
+                  Change
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="text"
+                    value={etfInput}
+                    onChange={(e) => {
+                      setEtfInput(e.target.value.toUpperCase());
+                      setEtfError(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddEtf();
+                      }
+                    }}
+                    placeholder="Enter ticker (e.g. QQQ, ARKK, VTI)"
+                    disabled={etfValidating}
+                    style={{
+                      flex: 1,
+                      padding: '10px 14px',
+                      background: 'var(--surface-2)',
+                      border: '1px solid var(--line)',
+                      borderRadius: 8,
+                      color: 'var(--text)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 13,
+                      outline: 'none',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddEtf}
+                    disabled={etfValidating || !etfInput.trim()}
+                    className="stadium-btn stadium-btn-primary"
+                    style={{ padding: '8px 16px', fontSize: 12 }}
+                  >
+                    {etfValidating ? 'Checking…' : 'Add'}
+                  </button>
+                </div>
+                {etfError && (
+                  <span
+                    className="mono"
+                    style={{ fontSize: 11, color: 'var(--ref-red)' }}
+                  >
+                    {etfError}
+                  </span>
+                )}
+                <span
+                  className="mono"
+                  style={{ fontSize: 10, color: 'var(--text-mute)', letterSpacing: '0.04em' }}
+                >
+                  Any Yahoo-listed stock, ETF, or index ticker works.
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Your squad */}
         <div>
@@ -164,6 +347,7 @@ export const CreateChallengeModal: React.FC<CreateChallengeModalProps> = ({
           >
             {CHALLENGE_TIMEFRAMES.map((tf) => {
               const isActive = selectedTimeframe === tf.value;
+              const mult = CHALLENGE_TIMEFRAME_XP_MULT[tf.value];
               return (
                 <button
                   key={tf.value}
@@ -182,9 +366,14 @@ export const CreateChallengeModal: React.FC<CreateChallengeModalProps> = ({
                     letterSpacing: '0.08em',
                     textTransform: 'uppercase',
                     transition: 'background .12s, border-color .12s',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 2,
                   }}
                 >
-                  {tf.label}
+                  <span>{tf.label}</span>
+                  <span style={{ fontSize: 9, opacity: 0.8 }}>×{mult}</span>
                 </button>
               );
             })}
@@ -231,17 +420,14 @@ export const CreateChallengeModal: React.FC<CreateChallengeModalProps> = ({
         >
           <div className="kicker" style={{ marginBottom: 10 }}>FIXTURE SUMMARY</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <SummaryRow
-              label="Type"
-              value={challengeType === 'sp500' ? 'vs S&P 500' : 'vs Manager'}
-            />
+            <SummaryRow label="Type" value={summaryType} />
             <SummaryRow
               label="Timeframe"
               value={CHALLENGE_TIMEFRAMES.find((t) => t.value === selectedTimeframe)?.label || selectedTimeframe}
             />
             <SummaryRow
               label="XP at stake"
-              value={`+${xpAtStake} XP`}
+              value={`+${baseXp} × ${multiplier}x = ${totalXp} XP`}
               valueColor="var(--whistle)"
             />
             {currentUser && (
@@ -273,7 +459,8 @@ export const CreateChallengeModal: React.FC<CreateChallengeModalProps> = ({
               isLoading ||
               !canCreate.canCreate ||
               !selectedPortfolioId ||
-              (challengeType === 'user' && !opponentPortfolioId)
+              (challengeType === 'user' && !opponentPortfolioId) ||
+              (challengeType === 'etf' && !etfSymbol)
             }
           >
             {isLoading ? (

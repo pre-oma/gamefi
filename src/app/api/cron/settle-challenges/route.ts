@@ -1,14 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { CHALLENGE_XP, Portfolio } from '@/types';
+import {
+  CHALLENGE_XP,
+  CHALLENGE_TIMEFRAME_XP_MULT,
+  ChallengeTimeframe,
+  Portfolio,
+} from '@/types';
 import {
   fetchSP500ReturnForPeriod,
+  fetchBenchmarkReturnForPeriod,
   calculatePortfolioReturnForPeriod,
   formatDateString,
 } from '@/lib/challengePerformance';
 
 // Secret key for cron authentication (set in environment variables)
 const CRON_SECRET = process.env.CRON_SECRET || '';
+
+/* Resolve the base XP at stake by challenge type. */
+function baseXpForType(type: string): number {
+  if (type === 'sp500') return CHALLENGE_XP.VS_SP500;
+  if (type === 'etf') return CHALLENGE_XP.VS_ETF;
+  return CHALLENGE_XP.VS_USER;
+}
+
+/* Apply the timeframe multiplier — longer fixtures pay more. */
+function xpWithMultiplier(base: number, timeframe: ChallengeTimeframe): number {
+  const mult = CHALLENGE_TIMEFRAME_XP_MULT[timeframe] ?? 1.0;
+  return Math.round(base * mult);
+}
 
 /**
  * Cron endpoint for auto-settling challenges
@@ -115,6 +134,12 @@ export async function GET(request: NextRequest) {
         let opponentReturnPercent = 0;
         if (challenge.type === 'sp500') {
           opponentReturnPercent = await fetchSP500ReturnForPeriod(startDate, endDate);
+        } else if (challenge.type === 'etf' && challenge.opponent_symbol) {
+          opponentReturnPercent = await fetchBenchmarkReturnForPeriod(
+            challenge.opponent_symbol,
+            startDate,
+            endDate,
+          );
         } else if (challenge.opponent_portfolio_id) {
           const { data: opponentPortfolioData } = await supabase
             .from('portfolios')
@@ -152,13 +177,20 @@ export async function GET(request: NextRequest) {
         // Determine winner
         let winnerId: string | null = null;
         let xpAwarded = 0;
+        const baseXp = baseXpForType(challenge.type);
+        const totalXp = xpWithMultiplier(baseXp, challenge.timeframe as ChallengeTimeframe);
+        const isBenchmark = challenge.type === 'sp500' || challenge.type === 'etf';
+        const benchmarkSentinel =
+          challenge.type === 'sp500'
+            ? 'sp500'
+            : challenge.opponent_symbol || 'etf';
 
         if (challengerReturnPercent > opponentReturnPercent) {
           winnerId = challenge.challenger_id;
-          xpAwarded = challenge.type === 'sp500' ? CHALLENGE_XP.VS_SP500 : CHALLENGE_XP.VS_USER;
+          xpAwarded = totalXp;
         } else if (opponentReturnPercent > challengerReturnPercent) {
-          winnerId = challenge.type === 'sp500' ? 'sp500' : challenge.opponent_id;
-          xpAwarded = challenge.type === 'sp500' ? CHALLENGE_XP.VS_SP500 : CHALLENGE_XP.VS_USER;
+          winnerId = isBenchmark ? benchmarkSentinel : challenge.opponent_id;
+          xpAwarded = totalXp;
         }
 
         // Calculate end values
@@ -187,15 +219,19 @@ export async function GET(request: NextRequest) {
 
         // Update XP for participants
         if (xpAwarded > 0) {
-          if (challenge.type === 'sp500') {
+          if (isBenchmark) {
             const xpChange = winnerId === challenge.challenger_id ? xpAwarded : -xpAwarded;
             await updateUserXP(challenge.challenger_id, xpChange);
+            const opponentLabel =
+              challenge.type === 'sp500'
+                ? 'S&P 500'
+                : challenge.opponent_symbol || 'the benchmark';
             await createNotification(
               challenge.challenger_id,
               winnerId === challenge.challenger_id ? 'challenge_won' : 'challenge_lost',
               challenge.id,
               Math.abs(xpChange),
-              'S&P 500'
+              opponentLabel,
             );
           } else if (winnerId) {
             await updateUserXP(challenge.challenger_id, winnerId === challenge.challenger_id ? xpAwarded : -xpAwarded);

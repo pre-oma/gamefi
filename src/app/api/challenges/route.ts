@@ -11,6 +11,7 @@ import {
   MAX_ACTIVE_CHALLENGES,
   CHALLENGE_TIMEFRAMES,
 } from '@/types';
+import { fetchYahooHistorical } from '@/lib/yahooHistorical';
 
 // Helper to create notification
 async function createNotification(
@@ -44,6 +45,7 @@ function dbToChallenge(db: Record<string, unknown>): Challenge {
     challengerPortfolioId: db.challenger_portfolio_id as string,
     opponentId: db.opponent_id as string | null,
     opponentPortfolioId: db.opponent_portfolio_id as string | null,
+    opponentSymbol: (db.opponent_symbol as string | null) ?? null,
     timeframe: db.timeframe as ChallengeTimeframe,
     startDate: db.start_date as string | null,
     endDate: db.end_date as string | null,
@@ -145,6 +147,12 @@ export async function GET(request: NextRequest) {
         challenge.opponentUsername = 'S&P 500';
         challenge.opponentAvatar = '/sp500-logo.png';
         challenge.opponentPortfolioName = 'SPY Index';
+      } else if (challenge.type === 'etf' && challenge.opponentSymbol) {
+        /* ETF challenges: surface the ticker as the opponent label so
+           cards/lists render "QQQ" / "VTI" instead of an empty slot. */
+        challenge.opponentUsername = challenge.opponentSymbol;
+        challenge.opponentAvatar = '/sp500-logo.png';
+        challenge.opponentPortfolioName = `${challenge.opponentSymbol} Index`;
       }
 
       formattedChallenges.push(challenge);
@@ -190,6 +198,7 @@ export async function POST(request: NextRequest) {
       timeframe,
       opponentId,
       opponentPortfolioId,
+      opponentSymbol,
     } = body as {
       challengerId: string;
       challengerPortfolioId: string;
@@ -197,6 +206,7 @@ export async function POST(request: NextRequest) {
       timeframe: ChallengeTimeframe;
       opponentId?: string;
       opponentPortfolioId?: string;
+      opponentSymbol?: string;
     };
 
     // Validate required fields
@@ -208,7 +218,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate type
-    if (type !== 'sp500' && type !== 'user') {
+    if (type !== 'sp500' && type !== 'user' && type !== 'etf') {
       return NextResponse.json(
         { success: false, error: 'Invalid challenge type' },
         { status: 400 }
@@ -221,6 +231,38 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'User challenges require an opponent' },
         { status: 400 }
       );
+    }
+
+    /* ETF challenges require a ticker symbol. We validate it against
+       Yahoo Finance live — bogus tickers (e.g. ZZZZZZ) come back ok=false
+       and we reject the request before persisting. Costs one Yahoo
+       round-trip per ETF challenge creation, which is acceptable. */
+    let normalizedEtfSymbol: string | null = null;
+    if (type === 'etf') {
+      if (!opponentSymbol || typeof opponentSymbol !== 'string') {
+        return NextResponse.json(
+          { success: false, error: 'ETF challenges require a ticker symbol' },
+          { status: 400 }
+        );
+      }
+
+      const candidate = opponentSymbol.trim().toUpperCase();
+      /* Pull ~1mo of data to confirm the ticker exists. We don't use
+         the data here — the settle/live routes refetch for the actual
+         period. Cheap enough; Yahoo returns 404 on unknown tickers. */
+      const probe = await fetchYahooHistorical({
+        symbol: candidate,
+        timeframe: '1M',
+      });
+
+      if (!probe.ok || probe.data.length === 0) {
+        return NextResponse.json(
+          { success: false, error: `Symbol "${candidate}" not found on Yahoo Finance` },
+          { status: 400 }
+        );
+      }
+
+      normalizedEtfSymbol = candidate;
     }
 
     // Get user's current XP and active challenge count
@@ -261,8 +303,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check XP requirement
-    const requiredXp = type === 'sp500' ? CHALLENGE_XP.VS_SP500 : CHALLENGE_XP.VS_USER;
+    // Check XP requirement — base XP only; multiplier applies at settle
+    const requiredXp =
+      type === 'sp500'
+        ? CHALLENGE_XP.VS_SP500
+        : type === 'etf'
+        ? CHALLENGE_XP.VS_ETF
+        : CHALLENGE_XP.VS_USER;
     if (user.xp < requiredXp) {
       return NextResponse.json(
         {
@@ -278,12 +325,12 @@ export async function POST(request: NextRequest) {
     const timeframeDays = CHALLENGE_TIMEFRAMES.find((t) => t.value === timeframe)?.days || 7;
     const endDate = new Date(now.getTime() + timeframeDays * 24 * 60 * 60 * 1000);
 
-    // For S&P 500 challenges, start immediately
-    // For user challenges, wait for acceptance (pending)
-    const isSp500 = type === 'sp500';
-    const status: ChallengeStatus = isSp500 ? 'active' : 'pending';
-    const startDate = isSp500 ? now.toISOString() : null;
-    const calculatedEndDate = isSp500 ? endDate.toISOString() : null;
+    /* sp500 + etf challenges start immediately (no opponent to wait on);
+       user challenges go pending until the opponent accepts. */
+    const startsImmediately = type === 'sp500' || type === 'etf';
+    const status: ChallengeStatus = startsImmediately ? 'active' : 'pending';
+    const startDate = startsImmediately ? now.toISOString() : null;
+    const calculatedEndDate = startsImmediately ? endDate.toISOString() : null;
 
     // Create challenge
     const challengeId = uuidv4();
@@ -297,11 +344,12 @@ export async function POST(request: NextRequest) {
         challenger_portfolio_id: challengerPortfolioId,
         opponent_id: type === 'user' ? opponentId : null,
         opponent_portfolio_id: type === 'user' ? opponentPortfolioId : null,
+        opponent_symbol: normalizedEtfSymbol,
         timeframe,
         start_date: startDate,
         end_date: calculatedEndDate,
-        challenger_start_value: isSp500 ? 10000 : null, // Will be calculated from portfolio
-        opponent_start_value: isSp500 ? 10000 : null,
+        challenger_start_value: startsImmediately ? 10000 : null, // Will be calculated from portfolio
+        opponent_start_value: startsImmediately ? 10000 : null,
         created_at: now.toISOString(),
       })
       .select()
@@ -335,9 +383,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       challenge,
-      message: isSp500
-        ? 'Challenge started! Track your performance against the S&P 500.'
-        : 'Challenge sent! Waiting for opponent to accept.',
+      message:
+        type === 'sp500'
+          ? 'Challenge started! Track your performance against the S&P 500.'
+          : type === 'etf'
+          ? `Challenge started! Track your performance against ${normalizedEtfSymbol}.`
+          : 'Challenge sent! Waiting for opponent to accept.',
     });
   } catch (error) {
     console.error('Create challenge error:', error);

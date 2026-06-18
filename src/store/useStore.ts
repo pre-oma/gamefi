@@ -18,6 +18,8 @@ import {
   TEAM_SLOT_UNLOCK_COST,
   MAX_ACTIVE_CHALLENGES,
   CHALLENGE_XP,
+  SeasonState,
+  AllocationStrategy,
 } from '@/types';
 import { AuthResponse } from '@/types';
 
@@ -61,6 +63,9 @@ interface AppState {
   lessonCompletions: Set<string>;
   lessonCompletionsLoaded: boolean;
 
+  // Season clock — populated by loadSeasonState() (called from loadData)
+  seasonState: SeasonState | null;
+
   // Actions - Auth
   login: (identifier: string, password: string) => Promise<AuthResponse>;
   register: (username: string, email: string, password: string) => Promise<AuthResponse>;
@@ -94,13 +99,32 @@ interface AppState {
     type: ChallengeType,
     timeframe: ChallengeTimeframe,
     opponentId?: string,
-    opponentPortfolioId?: string
+    opponentPortfolioId?: string,
+    /* ETF challenges only — Yahoo ticker (e.g. 'QQQ'). Validated
+       client-side via /api/yahoo-finance before this call and again
+       server-side in /api/challenges. */
+    opponentSymbol?: string,
   ) => Promise<{ success: boolean; error?: string; challenge?: Challenge }>;
   acceptChallenge: (challengeId: string, portfolioId: string) => Promise<{ success: boolean; error?: string }>;
   declineChallenge: (challengeId: string) => Promise<{ success: boolean; error?: string }>;
   cancelChallenge: (challengeId: string) => Promise<{ success: boolean; error?: string }>;
   getActiveChallengesCount: () => number;
   canCreateChallenge: (type: ChallengeType) => { canCreate: boolean; reason?: string };
+
+  // Actions - Season / Squad
+  loadSeasonState: () => Promise<void>;
+  weekendSwap: (
+    portfolioId: string,
+    starterSymbol: string,
+    benchSymbol: string,
+  ) => Promise<{ success: boolean; error?: string; swapsRemaining?: number }>;
+  quarterlyTransfer: (
+    portfolioId: string,
+    outSymbol: string,
+    inSymbol: string,
+    allocationStrategy: AllocationStrategy,
+    newAsset: Asset,
+  ) => Promise<{ success: boolean; error?: string; transfersRemaining?: number }>;
 
   // Actions - Live challenge returns (mid-match percentage refresh)
   loadLiveReturns: () => Promise<void>;
@@ -135,6 +159,9 @@ export const useStore = create<AppState>((set, get) => ({
   notifications: [],
   lessonCompletions: new Set<string>(),
   lessonCompletionsLoaded: false,
+
+  // Season state
+  seasonState: null,
 
   // Challenge initial state
   challenges: [],
@@ -467,6 +494,28 @@ export const useStore = create<AppState>((set, get) => ({
                     get().publicPortfolios.find((p) => p.id === portfolioId);
     if (!original) return null;
 
+    /* F7 privacy gate: when cloning someone else's portfolio, fetch the
+       snapshot via viewerId so the clone gets last weekend's lineup,
+       not the owner's in-progress squad. Cloning own portfolio uses
+       live data directly. */
+    let cloneSourcePlayers = original.players;
+    let cloneSourceFormation = original.formation;
+    if (original.userId !== currentUser.id) {
+      try {
+        const snapshotRes = await fetch(
+          `/api/portfolios?id=${portfolioId}&viewerId=${currentUser.id}`
+        );
+        const snapshotData = await snapshotRes.json();
+        if (snapshotData.success && snapshotData.portfolios?.length > 0) {
+          const snap = snapshotData.portfolios[0];
+          cloneSourcePlayers = snap.players;
+          cloneSourceFormation = snap.formation;
+        }
+      } catch (error) {
+        console.error('Failed to fetch snapshot for clone, falling back to cached data:', error);
+      }
+    }
+
     const response = await fetch('/api/portfolios', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -474,8 +523,8 @@ export const useStore = create<AppState>((set, get) => ({
         userId: currentUser.id,
         name: `${original.name} (Clone)`,
         description: original.description,
-        formation: original.formation,
-        players: original.players,
+        formation: cloneSourceFormation,
+        players: cloneSourcePlayers,
         isPublic: true,
         tags: original.tags,
       }),
@@ -608,7 +657,8 @@ export const useStore = create<AppState>((set, get) => ({
     type: ChallengeType,
     timeframe: ChallengeTimeframe,
     opponentId?: string,
-    opponentPortfolioId?: string
+    opponentPortfolioId?: string,
+    opponentSymbol?: string,
   ) => {
     const { currentUser, canCreateChallenge, loadChallenges } = get();
     if (!currentUser) return { success: false, error: 'Not logged in' };
@@ -629,6 +679,9 @@ export const useStore = create<AppState>((set, get) => ({
           timeframe,
           opponentId,
           opponentPortfolioId,
+          /* Only forward opponentSymbol for ETF challenges to avoid
+             accidentally tagging sp500/user rows with a stale value. */
+          opponentSymbol: type === 'etf' ? opponentSymbol : undefined,
         }),
       });
 
@@ -759,7 +812,12 @@ export const useStore = create<AppState>((set, get) => ({
       };
     }
 
-    const requiredXp = type === 'sp500' ? CHALLENGE_XP.VS_SP500 : CHALLENGE_XP.VS_USER;
+    const requiredXp =
+      type === 'sp500'
+        ? CHALLENGE_XP.VS_SP500
+        : type === 'etf'
+        ? CHALLENGE_XP.VS_ETF
+        : CHALLENGE_XP.VS_USER;
     if (currentUser.xp < requiredXp) {
       return {
         canCreate: false,
@@ -771,6 +829,71 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   // Data loading
+  // Season / Squad actions
+  loadSeasonState: async () => {
+    try {
+      const res = await fetch('/api/season');
+      const data = await res.json();
+      if (data.success && data.seasonState) {
+        set({ seasonState: data.seasonState as SeasonState });
+      }
+    } catch (error) {
+      console.error('Failed to load season state:', error);
+    }
+  },
+
+  weekendSwap: async (portfolioId, starterSymbol, benchSymbol) => {
+    const { currentUser, refreshPortfolios } = get();
+    if (!currentUser) return { success: false, error: 'Not logged in' };
+    try {
+      const res = await fetch('/api/squad/swap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          portfolioId,
+          starterSymbol,
+          benchSymbol,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) return { success: false, error: data.error };
+      set({ currentUser: { ...currentUser, xp: data.xp } });
+      await refreshPortfolios();
+      return { success: true, swapsRemaining: data.swapsRemaining };
+    } catch (error) {
+      console.error('weekendSwap failed:', error);
+      return { success: false, error: 'Swap failed' };
+    }
+  },
+
+  quarterlyTransfer: async (portfolioId, outSymbol, inSymbol, allocationStrategy, newAsset) => {
+    const { currentUser, refreshPortfolios } = get();
+    if (!currentUser) return { success: false, error: 'Not logged in' };
+    try {
+      const res = await fetch('/api/squad/transfer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          portfolioId,
+          outSymbol,
+          inSymbol,
+          inAsset: newAsset,
+          allocationStrategy,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) return { success: false, error: data.error };
+      set({ currentUser: { ...currentUser, xp: data.xp } });
+      await refreshPortfolios();
+      return { success: true, transfersRemaining: data.transfersRemaining };
+    } catch (error) {
+      console.error('quarterlyTransfer failed:', error);
+      return { success: false, error: 'Transfer failed' };
+    }
+  },
+
   loadLiveReturns: async () => {
     const { currentUser, challenges, activeChallenges } = get();
     if (!currentUser || activeChallenges.length === 0) return;
@@ -928,13 +1051,15 @@ export const useStore = create<AppState>((set, get) => ({
       const publicRes = await fetch('/api/portfolios');
       const publicData = await publicRes.json();
 
-      // Fetch challenges + training completions in parallel
-      const [challengesRes, completionsRes] = await Promise.all([
+      // Fetch challenges + training completions + season clock in parallel
+      const [challengesRes, completionsRes, seasonRes] = await Promise.all([
         fetch(`/api/challenges?userId=${sessionUserId}`),
         fetch(`/api/training/completions?userId=${sessionUserId}`),
+        fetch('/api/season'),
       ]);
       const challengesData = await challengesRes.json();
       const completionsData = await completionsRes.json().catch(() => ({ success: false }));
+      const seasonData = await seasonRes.json().catch(() => ({ success: false }));
 
       set({
         currentUser: userData.user,
@@ -950,6 +1075,7 @@ export const useStore = create<AppState>((set, get) => ({
           ? new Set<string>(completionsData.completions.map((c: { lessonId: string }) => c.lessonId))
           : new Set<string>(),
         lessonCompletionsLoaded: true,
+        seasonState: seasonData.success && seasonData.seasonState ? seasonData.seasonState : null,
       });
     } catch (error) {
       console.error('Failed to load data:', error);

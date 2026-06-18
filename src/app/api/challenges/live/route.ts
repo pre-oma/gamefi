@@ -1,8 +1,9 @@
 /* /api/challenges/live?userId=X
    For every active challenge involving this user, compute the current
    return percentages on both sides — challenger portfolio vs opponent
-   (S&P or rival portfolio). Reuses the same helpers the settle route
-   uses, just passing end_date = today instead of the scheduled close.
+   (S&P, ETF benchmark, or rival portfolio). Reuses the same helpers
+   the settle route uses, just passing end_date = today instead of the
+   scheduled close.
 
    Returns { success, live: { [challengeId]: { challengerReturnPercent,
    opponentReturnPercent } } }.
@@ -19,6 +20,7 @@ import { supabase } from '@/lib/supabase';
 import { Portfolio, PortfolioPlayer } from '@/types';
 import {
   fetchSP500ReturnForPeriod,
+  fetchBenchmarkReturnForPeriod,
   calculatePortfolioReturnForPeriod,
   formatDateString,
 } from '@/lib/challengePerformance';
@@ -115,10 +117,16 @@ export async function GET(request: NextRequest) {
             );
           }
 
-          /* Opponent return — S&P benchmark or rival portfolio */
+          /* Opponent return — benchmark (S&P / ETF) or rival portfolio */
           let opponentReturnPercent = 0;
           if (challenge.type === 'sp500') {
             opponentReturnPercent = await fetchSP500ReturnForPeriod(
+              startDate,
+              todayStr,
+            );
+          } else if (challenge.type === 'etf' && challenge.opponent_symbol) {
+            opponentReturnPercent = await fetchBenchmarkReturnForPeriod(
+              challenge.opponent_symbol,
               startDate,
               todayStr,
             );

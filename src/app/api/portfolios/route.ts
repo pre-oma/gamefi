@@ -4,11 +4,18 @@ import { supabase } from '@/lib/supabase';
 import { Portfolio, Formation, PortfolioPlayer } from '@/types';
 
 // GET - Fetch portfolios (optionally by user_id)
+/* GET — Fetch portfolios (optionally by user_id, or a single by ?id=X).
+   When ?id=X is supplied with ?viewerId=Y the F7 privacy gate applies:
+   - viewerId missing or === owner → live data
+   - viewerId !== owner → swap in latest portfolio_snapshots row + flag
+     isSnapshot=true. If no snapshot exists yet, return live with
+     noSnapshotAvailable=true. */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
     const portfolioId = searchParams.get('id');
+    const viewerId = searchParams.get('viewerId');
 
     let query = supabase.from('portfolios').select('*');
 
@@ -51,6 +58,33 @@ export async function GET(request: NextRequest) {
         .select('user_id')
         .eq('portfolio_id', portfolio.id);
       portfolio.likes = likes?.map(l => l.user_id) || [];
+    }
+
+    // F7 privacy gate: single portfolio + viewerId who isn't the owner →
+    // swap in latest snapshot players/formation, flag isSnapshot.
+    if (portfolioId && viewerId && formattedPortfolios.length > 0) {
+      const portfolio = formattedPortfolios[0];
+      if (viewerId !== portfolio.userId) {
+        const { data: snapshotRow } = await supabase
+          .from('portfolio_snapshots')
+          .select('players, formation, gameweek')
+          .eq('portfolio_id', portfolio.id)
+          .order('gameweek', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (snapshotRow) {
+          portfolio.players = typeof snapshotRow.players === 'string'
+            ? JSON.parse(snapshotRow.players)
+            : (snapshotRow.players || []);
+          portfolio.formation = snapshotRow.formation as Formation;
+          portfolio.isSnapshot = true;
+          portfolio.snapshotGameweek = snapshotRow.gameweek;
+        } else {
+          portfolio.isSnapshot = false;
+          portfolio.noSnapshotAvailable = true;
+        }
+      }
     }
 
     return NextResponse.json({ success: true, portfolios: formattedPortfolios });

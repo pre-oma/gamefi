@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { CHALLENGE_XP, Portfolio, PortfolioPlayer } from '@/types';
+import {
+  CHALLENGE_XP,
+  CHALLENGE_TIMEFRAME_XP_MULT,
+  ChallengeTimeframe,
+  Portfolio,
+} from '@/types';
 import {
   fetchSP500ReturnForPeriod,
+  fetchBenchmarkReturnForPeriod,
   calculatePortfolioReturnForPeriod,
   formatDateString,
 } from '@/lib/challengePerformance';
@@ -15,6 +21,20 @@ function getBaseUrl(request: NextRequest): string {
   const host = request.headers.get('host') || 'localhost:3000';
   const protocol = host.includes('localhost') ? 'http' : 'https';
   return `${protocol}://${host}`;
+}
+
+/* Resolve the base XP at stake by challenge type. */
+function baseXpForType(type: string): number {
+  if (type === 'sp500') return CHALLENGE_XP.VS_SP500;
+  if (type === 'etf') return CHALLENGE_XP.VS_ETF;
+  return CHALLENGE_XP.VS_USER;
+}
+
+/* Apply the timeframe multiplier — longer fixtures pay more. Rounded
+   to integer XP so the user-facing total never has fractional dust. */
+function xpWithMultiplier(base: number, timeframe: ChallengeTimeframe): number {
+  const mult = CHALLENGE_TIMEFRAME_XP_MULT[timeframe] ?? 1.0;
+  return Math.round(base * mult);
 }
 
 // POST - Settle completed challenges
@@ -102,6 +122,12 @@ export async function POST(request: NextRequest) {
         if (challenge.type === 'sp500') {
           // Fetch real S&P 500 return
           opponentReturnPercent = await fetchSP500ReturnForPeriod(startDate, endDate);
+        } else if (challenge.type === 'etf' && challenge.opponent_symbol) {
+          opponentReturnPercent = await fetchBenchmarkReturnForPeriod(
+            challenge.opponent_symbol,
+            startDate,
+            endDate,
+          );
         } else if (challenge.opponent_portfolio_id) {
           // Fetch opponent portfolio and calculate return
           const { data: opponentPortfolioData } = await supabase
@@ -140,13 +166,24 @@ export async function POST(request: NextRequest) {
         // Determine winner
         let winnerId: string | null = null;
         let xpAwarded = 0;
+        const baseXp = baseXpForType(challenge.type);
+        const totalXp = xpWithMultiplier(baseXp, challenge.timeframe as ChallengeTimeframe);
+        const isBenchmark = challenge.type === 'sp500' || challenge.type === 'etf';
+        /* Sentinel string used for benchmark winners. 'sp500' kept for
+           backwards-compat with rows already in the DB; etf challenges
+           use the actual ticker (e.g. 'QQQ') so leaderboard/reporting
+           can distinguish which benchmark beat the user. */
+        const benchmarkSentinel =
+          challenge.type === 'sp500'
+            ? 'sp500'
+            : challenge.opponent_symbol || 'etf';
 
         if (challengerReturnPercent > opponentReturnPercent) {
           winnerId = challenge.challenger_id;
-          xpAwarded = challenge.type === 'sp500' ? CHALLENGE_XP.VS_SP500 : CHALLENGE_XP.VS_USER;
+          xpAwarded = totalXp;
         } else if (opponentReturnPercent > challengerReturnPercent) {
-          winnerId = challenge.type === 'sp500' ? 'sp500' : challenge.opponent_id;
-          xpAwarded = challenge.type === 'sp500' ? CHALLENGE_XP.VS_SP500 : CHALLENGE_XP.VS_USER;
+          winnerId = isBenchmark ? benchmarkSentinel : challenge.opponent_id;
+          xpAwarded = totalXp;
         }
         // If equal, it's a draw - no XP awarded
 
@@ -178,18 +215,23 @@ export async function POST(request: NextRequest) {
 
         // Award/deduct XP and create notifications
         if (xpAwarded > 0) {
-          if (challenge.type === 'sp500') {
-            // VS S&P 500: winner gets XP, loser loses XP
+          if (isBenchmark) {
+            /* Benchmark (S&P or ETF): only the challenger has XP at
+               stake. Winner gets +xp, loser gets -xp. */
             const xpChange = winnerId === challenge.challenger_id ? xpAwarded : -xpAwarded;
             await updateUserXP(challenge.challenger_id, xpChange);
 
-            // Create notification for challenger
+            const opponentLabel =
+              challenge.type === 'sp500'
+                ? 'S&P 500'
+                : challenge.opponent_symbol || 'the benchmark';
+
             await createChallengeNotification(
               challenge.challenger_id,
               winnerId === challenge.challenger_id ? 'challenge_won' : 'challenge_lost',
               challenge.id,
               Math.abs(xpChange),
-              'S&P 500'
+              opponentLabel,
             );
           } else if (winnerId) {
             // VS User: winner gets XP, loser loses XP
@@ -227,12 +269,19 @@ export async function POST(request: NextRequest) {
           }
         } else {
           // Draw - notify both users
+          const drawOpponentLabel =
+            challenge.type === 'sp500'
+              ? 'S&P 500'
+              : challenge.type === 'etf'
+              ? challenge.opponent_symbol || 'the benchmark'
+              : 'opponent';
+
           await createChallengeNotification(
             challenge.challenger_id,
             'challenge_draw',
             challenge.id,
             0,
-            challenge.type === 'sp500' ? 'S&P 500' : 'opponent'
+            drawOpponentLabel,
           );
 
           if (challenge.opponent_id) {

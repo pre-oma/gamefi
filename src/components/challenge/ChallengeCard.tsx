@@ -20,6 +20,20 @@ const STATUS_PILL: Record<Challenge['status'], { label: string; cls: string }> =
   cancelled: { label: 'CANCELLED', cls: 'pill' },
 };
 
+/* Resolve XP at stake, including ETF type. */
+function xpStakeForType(type: Challenge['type']): number {
+  if (type === 'sp500') return CHALLENGE_XP.VS_SP500;
+  if (type === 'etf') return CHALLENGE_XP.VS_ETF;
+  return CHALLENGE_XP.VS_USER;
+}
+
+/* Header label for the matchup (e.g. "vs S&P 500", "vs QQQ", "vs Manager"). */
+function headerLabelFor(challenge: Challenge): string {
+  if (challenge.type === 'sp500') return 'vs S&P 500';
+  if (challenge.type === 'etf') return `vs ${challenge.opponentSymbol || 'ETF'}`;
+  return 'vs Manager';
+}
+
 export const ChallengeCard: React.FC<ChallengeCardProps> = ({
   challenge,
   showActions = true,
@@ -32,7 +46,8 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
   const isOpponent = currentUser?.id === challenge.opponentId;
   const isPending = challenge.status === 'pending';
   const isActive = challenge.status === 'active';
-  const xpAtStake = challenge.type === 'sp500' ? CHALLENGE_XP.VS_SP500 : CHALLENGE_XP.VS_USER;
+  const isBenchmark = challenge.type === 'sp500' || challenge.type === 'etf';
+  const xpAtStake = xpStakeForType(challenge.type);
   const timeframeLabel =
     CHALLENGE_TIMEFRAMES.find((t) => t.value === challenge.timeframe)?.label || challenge.timeframe;
   const statusInfo = STATUS_PILL[challenge.status];
@@ -78,9 +93,15 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
   const theirReturn = isChallenger ? challenge.opponentReturnPercent : challenge.challengerReturnPercent;
   const leading = (myReturn ?? 0) > (theirReturn ?? 0);
   const fmt = (n: number | null) => (n == null ? '—' : `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`);
+  /* Opponent display name:
+     - sp500: "S&P 500"
+     - etf:   the ticker (e.g. "QQQ")
+     - user:  the rival manager's username */
   const opponentName =
     challenge.type === 'sp500'
       ? 'S&P 500'
+      : challenge.type === 'etf'
+      ? challenge.opponentSymbol || 'ETF'
       : isChallenger
       ? challenge.opponentUsername || 'TBD'
       : challenge.challengerUsername || 'Challenger';
@@ -116,7 +137,7 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
               flexShrink: 0,
             }}
           >
-            {challenge.type === 'sp500' ? (
+            {isBenchmark ? (
               <Icon.Bolt size={14} style={{ color: 'var(--pitch)' }} />
             ) : (
               <Icon.Profile size={14} style={{ color: 'var(--pitch)' }} />
@@ -127,7 +148,7 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
               className="display"
               style={{ fontSize: 13, letterSpacing: '-0.01em' }}
             >
-              {challenge.type === 'sp500' ? 'vs S&P 500' : 'vs Manager'}
+              {headerLabelFor(challenge)}
             </div>
             <div className="mono" style={{ fontSize: 10, color: 'var(--text-mute)' }}>
               {timeframeLabel}
@@ -213,7 +234,7 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
 
           {/* Opponent */}
           <div style={{ textAlign: 'center' }}>
-            {challenge.type === 'sp500' ? (
+            {isBenchmark ? (
               <div
                 style={{
                   width: 36,
@@ -230,7 +251,7 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
                   fontSize: 10,
                 }}
               >
-                SPY
+                {challenge.type === 'sp500' ? 'SPY' : challenge.opponentSymbol || 'ETF'}
               </div>
             ) : (
               <img
@@ -259,7 +280,11 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
               {opponentName}
             </div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--text-mute)', marginTop: 2 }}>
-              {challenge.type === 'sp500' ? 'Market Index' : challenge.opponentPortfolioName || 'Rival'}
+              {challenge.type === 'sp500'
+                ? 'Market Index'
+                : challenge.type === 'etf'
+                ? 'ETF Benchmark'
+                : challenge.opponentPortfolioName || 'Rival'}
             </div>
             {isActive && challenge.opponentReturnPercent !== null && (
               <div

@@ -11,6 +11,22 @@ interface ChallengeResultCardProps {
   challenge: Challenge;
 }
 
+/* Benchmark winners use a sentinel id rather than a real userId.
+   - sp500 challenges store winner_id = 'sp500'
+   - etf  challenges store winner_id = the ticker (e.g. 'QQQ')
+   Treat either as "the benchmark won". */
+function benchmarkWonChallenge(challenge: Challenge): boolean {
+  if (challenge.type === 'sp500') return challenge.winnerId === 'sp500';
+  if (challenge.type === 'etf') {
+    return (
+      challenge.winnerId != null &&
+      challenge.winnerId !== challenge.challengerId &&
+      challenge.winnerId !== challenge.opponentId
+    );
+  }
+  return false;
+}
+
 export const ChallengeResultCard: React.FC<ChallengeResultCardProps> = ({ challenge }) => {
   const { currentUser } = useStore();
 
@@ -18,15 +34,36 @@ export const ChallengeResultCard: React.FC<ChallengeResultCardProps> = ({ challe
   const isOpponent = currentUser?.id === challenge.opponentId;
   const isWinner = challenge.winnerId === currentUser?.id;
   const isDraw = challenge.winnerId === null && challenge.status === 'completed';
-  const userWonVsSp500 = challenge.type === 'sp500' && challenge.winnerId === challenge.challengerId;
+  const isBenchmark = challenge.type === 'sp500' || challenge.type === 'etf';
+  const userWonVsBenchmark = isBenchmark && challenge.winnerId === challenge.challengerId;
+  const benchmarkWon = benchmarkWonChallenge(challenge);
 
   const timeframeLabel =
     CHALLENGE_TIMEFRAMES.find((t) => t.value === challenge.timeframe)?.label || challenge.timeframe;
 
-  const won = isWinner || userWonVsSp500;
+  const won = isWinner || userWonVsBenchmark;
   const resultLabel = won ? 'WIN' : isDraw ? 'DRAW' : 'LOSS';
   const resultPill = won ? 'pill pill-pitch' : isDraw ? 'pill pill-sky' : 'pill pill-red';
   const resultStripe = won ? 'var(--pitch)' : isDraw ? 'oklch(0.75 0.14 230)' : 'var(--ref-red)';
+
+  const opponentDisplayName =
+    challenge.type === 'sp500'
+      ? 'S&P 500'
+      : challenge.type === 'etf'
+      ? challenge.opponentSymbol || 'ETF'
+      : isOpponent
+      ? 'You'
+      : challenge.opponentUsername;
+
+  const benchmarkBadgeLabel =
+    challenge.type === 'sp500' ? 'SPY' : challenge.opponentSymbol || 'ETF';
+
+  const headerLabel =
+    challenge.type === 'sp500'
+      ? 'vs S&P 500'
+      : challenge.type === 'etf'
+      ? `vs ${challenge.opponentSymbol || 'ETF'}`
+      : 'vs Manager';
 
   return (
     <motion.div
@@ -75,7 +112,7 @@ export const ChallengeResultCard: React.FC<ChallengeResultCardProps> = ({ challe
           </div>
           <div style={{ minWidth: 0 }}>
             <div className="display" style={{ fontSize: 13, letterSpacing: '-0.01em' }}>
-              {challenge.type === 'sp500' ? 'vs S&P 500' : 'vs Manager'}
+              {headerLabel}
             </div>
             <div className="mono" style={{ fontSize: 10, color: 'var(--text-mute)' }}>
               {timeframeLabel} · {challenge.settledAt && formatDate(challenge.settledAt)}
@@ -199,7 +236,7 @@ export const ChallengeResultCard: React.FC<ChallengeResultCardProps> = ({ challe
 
           {/* Opponent */}
           <div style={{ textAlign: 'center' }}>
-            {challenge.type === 'sp500' ? (
+            {isBenchmark ? (
               <div
                 style={{
                   width: 36,
@@ -214,10 +251,10 @@ export const ChallengeResultCard: React.FC<ChallengeResultCardProps> = ({ challe
                   fontFamily: 'var(--font-display)',
                   fontWeight: 700,
                   fontSize: 10,
-                  border: '1px solid ' + (challenge.winnerId === 'sp500' ? 'var(--pitch)' : 'transparent'),
+                  border: '1px solid ' + (benchmarkWon ? 'var(--pitch)' : 'transparent'),
                 }}
               >
-                SPY
+                {benchmarkBadgeLabel}
               </div>
             ) : (
               <img
@@ -247,11 +284,7 @@ export const ChallengeResultCard: React.FC<ChallengeResultCardProps> = ({ challe
                 whiteSpace: 'nowrap',
               }}
             >
-              {challenge.type === 'sp500'
-                ? 'S&P 500'
-                : isOpponent
-                ? 'You'
-                : challenge.opponentUsername}
+              {opponentDisplayName}
             </div>
             <div
               className="display num"
@@ -264,7 +297,7 @@ export const ChallengeResultCard: React.FC<ChallengeResultCardProps> = ({ challe
             >
               {formatPercent(challenge.opponentReturnPercent || 0)}
             </div>
-            {(challenge.winnerId === challenge.opponentId || challenge.winnerId === 'sp500') && (
+            {(challenge.winnerId === challenge.opponentId || benchmarkWon) && (
               <div
                 className="mono"
                 style={{ fontSize: 9, color: 'var(--pitch)', marginTop: 2, letterSpacing: '0.12em' }}

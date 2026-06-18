@@ -1,7 +1,7 @@
 /**
  * Server-side utilities for calculating challenge performance.
  * Used by the settlement API and the live-returns endpoint to compute
- * portfolio / S&P returns for a given date range.
+ * portfolio / benchmark returns for a given date range.
  *
  * IMPORTANT: This calls fetchYahooHistorical directly (no HTTP hop
  * through /api/yahoo-finance/historical). Earlier versions used a
@@ -15,15 +15,17 @@ import { Portfolio, ChallengeTimeframe } from '@/types';
 import { fetchYahooHistorical } from '@/lib/yahooHistorical';
 
 /**
- * Fetch S&P 500 (SPY) return for a given date range.
+ * Fetch any single-ticker benchmark return for a given date range —
+ * used both for S&P (SPY) and arbitrary ETF challenges (QQQ, VTI, etc).
  */
-export async function fetchSP500ReturnForPeriod(
+export async function fetchBenchmarkReturnForPeriod(
+  symbol: string,
   startDate: string,
   endDate: string,
 ): Promise<number> {
   try {
     const result = await fetchYahooHistorical({
-      symbol: 'SPY',
+      symbol,
       startDate,
       endDate,
     });
@@ -38,9 +40,21 @@ export async function fetchSP500ReturnForPeriod(
 
     return ((endPrice - startPrice) / startPrice) * 100;
   } catch (error) {
-    console.error('Error fetching S&P 500 return:', error);
+    console.error(`Error fetching ${symbol} return:`, error);
     return 0;
   }
+}
+
+/**
+ * Fetch S&P 500 (SPY) return for a given date range.
+ * Thin wrapper around fetchBenchmarkReturnForPeriod for backwards
+ * compatibility — callers that hardcode SPY can keep their import.
+ */
+export async function fetchSP500ReturnForPeriod(
+  startDate: string,
+  endDate: string,
+): Promise<number> {
+  return fetchBenchmarkReturnForPeriod('SPY', startDate, endDate);
 }
 
 /**

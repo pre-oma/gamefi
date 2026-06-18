@@ -15,6 +15,9 @@ export interface Challenge {
   challengerPortfolioId: string;
   opponentId: string | null;
   opponentPortfolioId: string | null;
+  /* For type='etf' fixtures: the Yahoo ticker of the benchmark
+     (e.g. 'QQQ', 'ARKK', 'VTI'). Null for sp500/user types. */
+  opponentSymbol?: string | null;
   timeframe: ChallengeTimeframe;
   startDate: string | null;
   endDate: string | null;
@@ -262,6 +265,14 @@ export interface Portfolio {
   clonedFrom: string | null;
   cloneCount: number;
   tags: string[];
+  /* Privacy gate flags set by the API when a non-owner viewer fetches
+     this portfolio. isSnapshot=true means players/formation reflect
+     the last Fri 21:00 UTC snapshot rather than live; snapshotGameweek
+     identifies which week; noSnapshotAvailable=true on first-week view
+     when no snapshot has been taken yet. */
+  isSnapshot?: boolean;
+  snapshotGameweek?: number;
+  noSnapshotAvailable?: boolean;
 }
 
 export interface PortfolioPerformance {
