@@ -3,7 +3,7 @@ export const DEFAULT_MAX_TEAMS = 3;
 export const TEAM_SLOT_UNLOCK_COST = 1000; // XP cost to unlock additional team slot
 
 // Challenge Types
-export type ChallengeType = 'sp500' | 'user';
+export type ChallengeType = 'sp500' | 'user' | 'etf';
 export type ChallengeStatus = 'pending' | 'active' | 'completed' | 'declined' | 'cancelled';
 export type ChallengeTimeframe = '1W' | '2W' | '1M' | '3M';
 
@@ -37,8 +37,17 @@ export interface Challenge {
   opponentPortfolioName?: string;
 }
 
-export const CHALLENGE_XP = { VS_SP500: 100, VS_USER: 200 };
+export const CHALLENGE_XP = { VS_SP500: 100, VS_USER: 200, VS_ETF: 150 };
 export const MAX_ACTIVE_CHALLENGES = 3;
+
+/* XP multiplier by challenge timeframe — longer commitments pay more.
+   Applied at settle time: awarded = base * CHALLENGE_TIMEFRAME_XP_MULT[timeframe]. */
+export const CHALLENGE_TIMEFRAME_XP_MULT: Record<ChallengeTimeframe, number> = {
+  '1W': 1.0,
+  '2W': 1.5,
+  '1M': 2.5,
+  '3M': 5.0,
+};
 
 // Training / lesson completion
 export const LESSON_COMPLETION_XP = 100;
@@ -230,6 +239,12 @@ export interface PortfolioPlayer {
   positionId: string;
   asset: Asset | null;
   allocation: number; // Should be approximately 9.09% (100/11) per player
+  /* True when the player sits on the bench (11 reserves alongside the
+     11 starters). Bench players have allocation 0 and don't contribute
+     to portfolio returns until subbed onto the pitch in a weekend
+     swap. Undefined/false = starter, for backwards-compat with old
+     11-player rows. */
+  isBench?: boolean;
 }
 
 // Portfolio Types
@@ -799,3 +814,84 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   { id: 'challenges', title: 'Challenge Others', description: 'Compete against the S&P 500 or other users to earn XP!', target: '[data-tour="challenges"]', position: 'right' },
   { id: 'learn', title: 'Keep Learning', description: 'Visit the Learn section to improve your investing skills.', target: '[data-tour="learn"]', position: 'right' },
 ];
+
+// ============================================================
+// SEASON / SQUAD / TRANSFER / SNAPSHOT TYPES
+// Shared contract for the season-features expansion. Server APIs
+// and client store read these constants so caps/costs stay in sync.
+// ============================================================
+
+export const SQUAD_STARTER_COUNT = 11;
+export const SQUAD_BENCH_COUNT = 11;
+export const SQUAD_TOTAL_COUNT = SQUAD_STARTER_COUNT + SQUAD_BENCH_COUNT;
+
+// 52-week global season, with 4 quarters of 13 weeks each
+export const SEASON_TOTAL_WEEKS = 52;
+export const WEEKS_PER_QUARTER = 13;
+
+// Quarterly transfer windows — open at gameweeks 1, 14, 27, 40 and
+// stay open for 2 gameweeks each. New signings only allowed inside.
+export const QUARTER_OPEN_GAMEWEEKS = [1, 14, 27, 40] as const;
+export const QUARTER_WINDOW_LENGTH_WEEKS = 2;
+
+// Weekend swap window — Fri 16:00 ET (= Fri 21:00 UTC, ignoring DST
+// fuzz) through Mon 05:00 UTC ≈ Sun 23:59 ET. Subs only allowed
+// inside; outside, the squad is locked.
+export const WEEKEND_OPEN_DAY_UTC = 5;       // Friday
+export const WEEKEND_OPEN_HOUR_UTC = 21;
+export const WEEKEND_CLOSE_DAY_UTC = 1;      // Monday
+export const WEEKEND_CLOSE_HOUR_UTC = 5;
+
+// Caps and costs
+export const WEEKEND_SUB_MAX_PER_WEEKEND = 4;
+export const WEEKEND_SUB_COST_XP = 25;
+export const QUARTERLY_TRANSFER_MAX_PER_QUARTER = 5;
+export const QUARTERLY_TRANSFER_COST_XP = 100;
+
+export type AllocationStrategy = 'inherit' | 'split';
+
+export interface SeasonState {
+  seasonNumber: number;
+  startDate: string;          // YYYY-MM-DD (a Monday)
+  totalWeeks: number;
+  /* Computed: current gameweek 1..52, current quarter 1..4. */
+  currentGameweek: number;
+  currentQuarter: number;
+  isTransferWindowOpen: boolean;
+  isWeekendWindowOpen: boolean;
+}
+
+export interface WeekendSwap {
+  id: string;
+  userId: string;
+  portfolioId: string;
+  gameweek: number;
+  seasonNumber: number;
+  starterSymbol: string;     // moved to bench
+  benchSymbol: string;       // came on
+  xpCost: number;
+  createdAt: string;
+}
+
+export interface TransferLogEntry {
+  id: string;
+  userId: string;
+  portfolioId: string;
+  quarter: number;
+  seasonNumber: number;
+  outSymbol: string;
+  inSymbol: string;
+  allocationStrategy: AllocationStrategy;
+  xpCost: number;
+  createdAt: string;
+}
+
+export interface PortfolioSnapshot {
+  id: string;
+  portfolioId: string;
+  snapshotDate: string;
+  gameweek: number;
+  seasonNumber: number;
+  players: PortfolioPlayer[];
+  formation: Formation;
+}
