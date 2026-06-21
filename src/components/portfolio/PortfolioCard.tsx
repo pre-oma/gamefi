@@ -23,7 +23,7 @@ export const PortfolioCard: React.FC<PortfolioCardProps> = ({
   showUser = true,
   showActions = true,
 }) => {
-  const { currentUser, likePortfolio, clonePortfolio, canCreateTeam, getTeamSlotInfo, unlockTeamSlot } = useStore();
+  const { currentUser, likePortfolio, clonePortfolio, canCreateTeam, getTeamSlotInfo, unlockTeamSlot, followUser, unfollowUser } = useStore();
   const owner = userStorage.getUserById(portfolio.userId);
   const [showLimitModal, setShowLimitModal] = useState(false);
 
@@ -31,6 +31,9 @@ export const PortfolioCard: React.FC<PortfolioCardProps> = ({
 
   const isOwner = currentUser?.id === portfolio.userId;
   const hasLiked = currentUser ? portfolio.likes.includes(currentUser.id) : false;
+  const isFollowing = currentUser
+    ? currentUser.following.includes(portfolio.userId)
+    : false;
   const filledPositions = portfolio.players.filter((p) => p.asset !== null).length;
   const positive = performance.totalReturnPercent >= 0;
 
@@ -60,6 +63,14 @@ export const PortfolioCard: React.FC<PortfolioCardProps> = ({
       setShowLimitModal(false);
       clonePortfolio(portfolio.id);
     }
+  };
+
+  const handleFollowToggle = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!currentUser || isOwner) return;
+    if (isFollowing) unfollowUser(portfolio.userId);
+    else followUser(portfolio.userId);
   };
 
   return (
@@ -230,6 +241,25 @@ export const PortfolioCard: React.FC<PortfolioCardProps> = ({
           >
             {hasLiked ? '♥' : '♡'} {portfolio.likes.length}
           </button>
+
+          {!isOwner && currentUser && (
+            <button
+              type="button"
+              onClick={handleFollowToggle}
+              className="stadium-btn stadium-btn-ghost"
+              title={isFollowing ? 'Stop following this manager' : 'Follow this manager'}
+              style={{
+                padding: '5px 10px',
+                fontSize: 11,
+                gap: 4,
+                color: isFollowing ? 'var(--pitch)' : undefined,
+                background: isFollowing ? 'oklch(0.72 0.21 145 / 0.08)' : undefined,
+                borderColor: isFollowing ? 'oklch(0.72 0.21 145 / 0.35)' : undefined,
+              }}
+            >
+              {isFollowing ? 'Following ✓' : 'Follow'}
+            </button>
+          )}
 
           {!isOwner && (
             <button

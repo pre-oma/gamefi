@@ -255,9 +255,13 @@ const ScoutCard: React.FC<{ portfolio: Portfolio; performance?: PortfolioPerform
   performance,
 }) => {
   const router = useRouter();
-  const { currentUser, likePortfolio, clonePortfolio } = useStore();
+  const { currentUser, likePortfolio, clonePortfolio, followUser, unfollowUser } = useStore();
   const [isCloning, setIsCloning] = useState(false);
   const hasLiked = currentUser ? portfolio.likes.includes(currentUser.id) : false;
+  const isOwnSquad = currentUser?.id === portfolio.userId;
+  const isFollowing = currentUser
+    ? currentUser.following.includes(portfolio.userId)
+    : false;
   const perf = performance || calculatePortfolioPerformance(portfolio);
   const positive = perf.totalReturnPercent >= 0;
 
@@ -281,6 +285,14 @@ const ScoutCard: React.FC<{ portfolio: Portfolio; performance?: PortfolioPerform
     } finally {
       setIsCloning(false);
     }
+  };
+
+  const handleFollowToggle = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!currentUser || isOwnSquad) return;
+    if (isFollowing) unfollowUser(portfolio.userId);
+    else followUser(portfolio.userId);
   };
 
   return (
@@ -363,6 +375,25 @@ const ScoutCard: React.FC<{ portfolio: Portfolio; performance?: PortfolioPerform
 
       {/* Actions */}
       <div className="flex" style={{ gap: 6 }}>
+        {!isOwnSquad && currentUser && (
+          <button
+            type="button"
+            onClick={handleFollowToggle}
+            className="stadium-btn stadium-btn-ghost"
+            title={isFollowing ? 'Stop following this manager' : 'Follow this manager'}
+            style={{
+              flex: 1,
+              justifyContent: 'center',
+              padding: '6px 10px',
+              fontSize: 11,
+              color: isFollowing ? 'var(--pitch)' : undefined,
+              borderColor: isFollowing ? 'oklch(0.72 0.21 145 / 0.35)' : undefined,
+              background: isFollowing ? 'oklch(0.72 0.21 145 / 0.08)' : undefined,
+            }}
+          >
+            {isFollowing ? 'Following ✓' : 'Follow'}
+          </button>
+        )}
         <button
           type="button"
           onClick={handleLike}
