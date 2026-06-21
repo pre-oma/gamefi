@@ -57,6 +57,19 @@ export default function SignSquadPage() {
     if (prefillApplied || !prefillSymbol || !portfolio) return;
     const target = prefillSymbol.toUpperCase();
 
+    /* Block prefill if the symbol is already in the squad — one ticker
+       per squad rule. Surfaces a notice so the user knows nothing was
+       added. */
+    const alreadyHere = portfolio.players.some((p) => {
+      const eff = effectiveAsset(p.positionId, p.asset);
+      return eff?.symbol?.toUpperCase() === target;
+    });
+    if (alreadyHere) {
+      setPrefillNotice(`${target} is already in this squad. Each ticker can only be signed once.`);
+      setPrefillApplied(true);
+      return;
+    }
+
     const firstEmptyStarter = portfolio.players.find(
       (p) => !p.isBench && !p.asset && !pending.has(p.positionId),
     );
@@ -227,8 +240,30 @@ export default function SignSquadPage() {
     });
   };
 
+  /* Build the set of ticker symbols currently occupying the 22 slots
+     (taking pending changes into account, excluding the slot being
+     edited). Used to enforce the "one ticker per squad" rule when the
+     user is about to assign a new asset. */
+  const usedSymbols = (excludePositionId?: string): Set<string> => {
+    const set = new Set<string>();
+    for (const p of portfolio.players) {
+      if (p.positionId === excludePositionId) continue;
+      const eff = effectiveAsset(p.positionId, p.asset);
+      if (eff?.symbol) set.add(eff.symbol.toUpperCase());
+    }
+    return set;
+  };
+
   const handleAssetSelected = (asset: Asset | null) => {
     if (!editingSlot) return;
+    if (asset && usedSymbols(editingSlot.positionId).has(asset.symbol.toUpperCase())) {
+      setError(
+        `${asset.symbol} is already in this squad. Each ticker can only be signed once — release the other slot first.`,
+      );
+      setEditingSlot(null);
+      return;
+    }
+    setError(null);
     setPending((prev) => {
       const next = new Map(prev);
       next.set(editingSlot.positionId, asset);

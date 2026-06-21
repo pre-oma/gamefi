@@ -216,6 +216,22 @@ export default function PortfolioDetailPage() {
 
   const handleAssetSelect = async (asset: any) => {
     if (!selectedPosition || !portfolio) return;
+    /* One-ticker-per-squad rule: reject if this symbol is already on
+       any other slot in the squad. */
+    if (asset?.symbol) {
+      const dup = portfolio.players.some(
+        (p) =>
+          p.positionId !== selectedPosition.player.positionId &&
+          p.asset?.symbol?.toUpperCase() === asset.symbol.toUpperCase(),
+      );
+      if (dup) {
+        alert(
+          `${asset.symbol} is already in this squad. Each ticker can only be signed once — release the existing slot first.`,
+        );
+        setSelectedPosition(null);
+        return;
+      }
+    }
     await assignAssetToPosition(portfolio.id, selectedPosition.player.positionId, asset);
     const res = await fetch(`/api/portfolios?id=${portfolio.id}`);
     const data = await res.json();
@@ -2086,27 +2102,46 @@ const RosterRow: React.FC<{
             ↑ ON BENCH
           </span>
         )}
-        <button
-          type="button"
-          onClick={onTransferOut}
-          disabled={transferDisabled}
-          title={
-            transferDisabledReason ||
-            `Transfer out ${player.asset.symbol} (${QUARTERLY_TRANSFER_COST_XP} XP)`
-          }
-          className="stadium-btn stadium-btn-ghost"
-          style={{
-            padding: '6px 10px',
-            fontSize: 11,
-            opacity: transferDisabled ? 0.45 : 1,
-            cursor: transferDisabled ? 'not-allowed' : 'pointer',
-            minHeight: 32,
-            color: transferDisabled ? undefined : 'var(--whistle)',
-            borderColor: transferDisabled ? undefined : 'oklch(0.83 0.18 90 / 0.4)',
-          }}
-        >
-          Transfer out
-        </button>
+        {/* Transfer-out is bench-only. Starters must be subbed off first
+            so their allocation can be reassigned before the symbol leaves
+            the squad. */}
+        {squadView === 'bench' ? (
+          <button
+            type="button"
+            onClick={onTransferOut}
+            disabled={transferDisabled}
+            title={
+              transferDisabledReason ||
+              `Transfer out ${player.asset.symbol} (${QUARTERLY_TRANSFER_COST_XP} XP)`
+            }
+            className="stadium-btn stadium-btn-ghost"
+            style={{
+              padding: '6px 10px',
+              fontSize: 11,
+              opacity: transferDisabled ? 0.45 : 1,
+              cursor: transferDisabled ? 'not-allowed' : 'pointer',
+              minHeight: 32,
+              color: transferDisabled ? undefined : 'var(--whistle)',
+              borderColor: transferDisabled ? undefined : 'oklch(0.83 0.18 90 / 0.4)',
+            }}
+          >
+            Transfer out
+          </button>
+        ) : (
+          <span
+            className="mono"
+            style={{
+              padding: '6px 8px',
+              fontSize: 9,
+              color: 'var(--text-mute)',
+              letterSpacing: '0.06em',
+              alignSelf: 'center',
+            }}
+            title="Starters can't be transferred out directly — sub them to the bench first, then transfer out from there."
+          >
+            sub off to transfer
+          </span>
+        )}
       </div>
     </div>
   );

@@ -186,6 +186,25 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Portfolio ID required' }, { status: 400 });
     }
 
+    /* One-ticker-per-squad rule: reject if the incoming players array
+       contains the same ticker on two different slots. Existing legacy
+       portfolios with dupes aren't auto-cleaned — but no future PUT
+       can introduce or perpetuate one. */
+    if (Array.isArray(players)) {
+      const seen = new Map<string, string>();
+      for (const p of players) {
+        const sym = p?.asset?.symbol?.toUpperCase?.();
+        if (!sym) continue;
+        if (seen.has(sym) && seen.get(sym) !== p.positionId) {
+          return NextResponse.json(
+            { success: false, error: `${sym} is in this squad twice. Each ticker can only be signed once.` },
+            { status: 400 },
+          );
+        }
+        seen.set(sym, p.positionId);
+      }
+    }
+
     const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
