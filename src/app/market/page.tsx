@@ -8,7 +8,7 @@ import { MOCK_ASSETS, SECTORS, getAllAssets, addExternalAsset } from '@/data/ass
 import { formatCurrency, formatPercent, formatNumber } from '@/lib/utils';
 import { useAssetSearch } from '@/hooks/useAssetSearch';
 import { useStore } from '@/store/useStore';
-import { Asset } from '@/types';
+import { Asset, SQUAD_STARTER_COUNT, SQUAD_BENCH_COUNT } from '@/types';
 import { Icon } from '@/components/stadium/Icon';
 
 type SortBy = 'name' | 'price' | 'change' | 'marketCap';
@@ -452,7 +452,18 @@ export default function MarketPage() {
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {portfolios.map((p) => {
-            const empty = p.players.filter((pl) => !pl.asset).length;
+            /* Count empty across the full 22-slot squad model — not just
+               p.players.length. Legacy 11-player portfolios show 0 here
+               otherwise, undercounting their bench. Mirrors what the
+               /sign page renders so the number matches once the user
+               lands there. */
+            const starterEntries = p.players.filter((pl) => !pl.isBench);
+            const benchEntries = p.players.filter((pl) => pl.isBench);
+            const filledStarters = starterEntries.filter((pl) => pl.asset).length;
+            const filledBench = benchEntries.filter((pl) => pl.asset).length;
+            const emptyStarters = SQUAD_STARTER_COUNT - filledStarters;
+            const emptyBench = SQUAD_BENCH_COUNT - filledBench;
+            const empty = Math.max(0, emptyStarters) + Math.max(0, emptyBench);
             return (
               <button
                 key={p.id}
@@ -481,7 +492,7 @@ export default function MarketPage() {
                     {p.name}
                   </div>
                   <div className="mono" style={{ fontSize: 10, color: 'var(--text-mute)', marginTop: 2 }}>
-                    {p.formation} · {empty} empty slot{empty === 1 ? '' : 's'}
+                    {p.formation} · {empty} empty (XI {Math.max(0, emptyStarters)} · BEN {Math.max(0, emptyBench)})
                   </div>
                 </div>
                 <Icon.Arrow size={14} style={{ color: 'var(--pitch)' }} />
