@@ -101,29 +101,8 @@ export const LeaderboardTable: React.FC = () => {
 
   return (
     <div className="stadium-card" style={{ overflow: 'hidden' }}>
-      {/* Table header */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '54px minmax(180px, 1.6fr) minmax(140px, 1.2fr) 110px 100px 110px',
-          gap: 12,
-          padding: '12px 18px',
-          background: 'var(--surface-2)',
-          borderBottom: '1px solid var(--line)',
-        }}
-      >
-        {['POS', 'MANAGER', 'SQUAD', 'STARTED', 'VALUE', 'RETURN'].map((h, i) => (
-          <div
-            key={h}
-            className="kicker"
-            style={{ fontSize: 9, textAlign: i >= 4 ? 'right' : 'left' }}
-          >
-            {h}
-          </div>
-        ))}
-      </div>
-
-      {/* Rows */}
+      {/* Empty state stays OUTSIDE the scroll wrapper — it's a single
+          centred message that should fill the card, not be scrolled. */}
       {entries.length === 0 ? (
         <div style={{ padding: 48, textAlign: 'center' }}>
           <Icon.Trophy size={36} style={{ color: 'var(--text-mute)', margin: '0 auto 12px' }} />
@@ -135,7 +114,35 @@ export const LeaderboardTable: React.FC = () => {
           </div>
         </div>
       ) : (
-        entries.map((entry, i) => {
+        /* Wrap the header + grid rows in a horizontal-scroll region so
+           the 720px+ track stays legible on phones (≤375px viewports
+           previously chopped 3 columns off the end). Mirrors the
+           pattern used on Market and Holdings. */
+        <div className="stadium-table-scroll">
+          <div style={{ minWidth: 720 }}>
+            {/* Table header */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '54px minmax(180px, 1.6fr) minmax(140px, 1.2fr) 110px 100px 110px',
+                gap: 12,
+                padding: '12px 18px',
+                background: 'var(--surface-2)',
+                borderBottom: '1px solid var(--line)',
+              }}
+            >
+              {['POS', 'MANAGER', 'SQUAD', 'STARTED', 'VALUE', 'RETURN'].map((h, i) => (
+                <div
+                  key={h}
+                  className="kicker"
+                  style={{ fontSize: 9, textAlign: i >= 4 ? 'right' : 'left' }}
+                >
+                  {h}
+                </div>
+              ))}
+            </div>
+
+            {entries.map((entry, i) => {
           const isYou = currentUser?.id === entry.userId;
           const podiumColor =
             entry.rank === 1
@@ -289,7 +296,9 @@ export const LeaderboardTable: React.FC = () => {
               </div>
             </div>
           );
-        })
+        })}
+          </div>
+        </div>
       )}
     </div>
   );
