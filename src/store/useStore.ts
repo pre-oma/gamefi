@@ -120,6 +120,29 @@ interface AppState {
     benchSymbol: string,
     allocationStrategy?: AllocationStrategy,
   ) => Promise<{ success: boolean; error?: string; swapsRemaining?: number }>;
+  weekendSwapBatch: (
+    portfolioId: string,
+    swaps: Array<{
+      starterSymbol: string;
+      benchSymbol: string;
+      allocationStrategy?: AllocationStrategy;
+    }>,
+  ) => Promise<{
+    success: boolean;
+    error?: string;
+    appliedCount?: number;
+    swapsRemaining?: number;
+    /* Per-swap status — index matches the input array. Successful
+       entries have success:true; failures carry the server-side
+       error string (cap_exceeded, not-found, xp). */
+    results?: Array<{
+      index: number;
+      starterSymbol: string;
+      benchSymbol: string;
+      success: boolean;
+      error?: string;
+    }>;
+  }>;
   quarterlyTransfer: (
     portfolioId: string,
     outSymbol: string,
@@ -913,6 +936,54 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (error) {
       console.error('weekendSwap failed:', error);
       return { success: false, error: 'Swap failed' };
+    }
+  },
+
+  /* Batched weekend subs (item 17). Mirrors weekendSwap's shape: takes
+     the list, hands it to /api/squad/swap/batch, and refreshes XP +
+     portfolios on response. The server enforces the per-weekend cap
+     and returns a per-swap results array — surfacing it lets the UI
+     show "3 applied, 1 failed (cap reached)" instead of a flat
+     success/error. */
+  weekendSwapBatch: async (portfolioId, swaps) => {
+    const { currentUser, refreshPortfolios } = get();
+    if (!currentUser) return { success: false, error: 'Not logged in' };
+    if (!Array.isArray(swaps) || swaps.length === 0) {
+      return { success: false, error: 'No swaps requested' };
+    }
+    try {
+      const res = await fetch('/api/squad/swap/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          portfolioId,
+          swaps,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        /* Even on failure the server returns the per-swap results so
+           the UI can show which ones broke; preserve that. */
+        return {
+          success: false,
+          error: data.error,
+          results: data.results,
+          appliedCount: data.appliedCount,
+          swapsRemaining: data.swapsRemaining,
+        };
+      }
+      set({ currentUser: { ...currentUser, xp: data.xp } });
+      await refreshPortfolios();
+      return {
+        success: true,
+        appliedCount: data.appliedCount,
+        swapsRemaining: data.swapsRemaining,
+        results: data.results,
+      };
+    } catch (error) {
+      console.error('weekendSwapBatch failed:', error);
+      return { success: false, error: 'Batch swap failed' };
     }
   },
 

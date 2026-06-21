@@ -94,6 +94,7 @@ export default function PortfolioDetailPage() {
     deletePortfolio,
     seasonState,
     weekendSwap,
+    weekendSwapBatch,
     quarterlyTransfer,
   } = useStore();
 
@@ -124,7 +125,9 @@ export default function PortfolioDetailPage() {
   const [squadView, setSquadView] = useState<'starting' | 'bench'>('starting');
 
   /* Sub modal: pick a bench player to swap in for the highlighted
-     starter. Open when subStarter is set; closed when null. */
+     starter. Open when subStarter is set; closed when null. The
+     selection now appends to subPlan (item 17) rather than firing
+     immediately — confirm in the plan tray. */
   const [subStarter, setSubStarter] = useState<PortfolioPlayer | null>(null);
   const [subError, setSubError] = useState<string | null>(null);
   const [subBusy, setSubBusy] = useState(false);
@@ -132,6 +135,17 @@ export default function PortfolioDetailPage() {
   /* Which allocation strategy the user picked for the next sub.
      Persists across re-opens of the sub modal within the same view. */
   const [subStrategy, setSubStrategy] = useState<'inherit' | 'split'>('inherit');
+
+  /* Multi-sub plan (item 17, Marcus). Each entry is a starter↔bench
+     pair with its own allocation strategy; the user reviews up to 4
+     pairs then fires one batched request. */
+  type SubPlanEntry = {
+    starterSymbol: string;
+    benchSymbol: string;
+    allocationStrategy: AllocationStrategy;
+    starterAllocation: number;
+  };
+  const [subPlan, setSubPlan] = useState<SubPlanEntry[]>([]);
 
   /* Transfer (quarterly) flow: when set, AssetSelector opens in signingMode
      so the user picks a replacement for the outgoing player and chooses
@@ -994,6 +1008,201 @@ export default function PortfolioDetailPage() {
                     </p>
                   </div>
                 )}
+                {/* Sub plan tray (item 17) — accumulates starter↔bench
+                    pairs from the Sub off modal; one Confirm batches
+                    them all. */}
+                {subPlan.length > 0 && (
+                  <div
+                    className="stadium-card"
+                    style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}
+                  >
+                    <div className="flex flex-wrap items-center justify-between" style={{ gap: 10 }}>
+                      <div>
+                        <div className="kicker">SUB PLAN</div>
+                        <div
+                          className="display"
+                          style={{ fontSize: 16, letterSpacing: '-0.02em', marginTop: 2 }}
+                        >
+                          {subPlan.length} sub{subPlan.length === 1 ? '' : 's'} staged
+                          <span
+                            className="mono"
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 400,
+                              color: 'var(--text-mute)',
+                              marginLeft: 8,
+                              letterSpacing: '0.06em',
+                            }}
+                          >
+                            · {subPlan.length * WEEKEND_SUB_COST_XP} XP TOTAL
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex" style={{ gap: 8 }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSubPlan([]);
+                            setSubError(null);
+                          }}
+                          disabled={subBusy}
+                          className="stadium-btn stadium-btn-ghost"
+                          style={{ padding: '8px 12px', fontSize: 11, minHeight: 36 }}
+                        >
+                          Clear plan
+                        </button>
+                        <button
+                          type="button"
+                          disabled={subBusy}
+                          onClick={async () => {
+                            setSubBusy(true);
+                            setSubError(null);
+                            const result = await weekendSwapBatch(
+                              portfolio.id,
+                              subPlan.map((e) => ({
+                                starterSymbol: e.starterSymbol,
+                                benchSymbol: e.benchSymbol,
+                                allocationStrategy: e.allocationStrategy,
+                              })),
+                            );
+                            setSubBusy(false);
+                            if (!result.success && (result.appliedCount ?? 0) === 0) {
+                              setSubError(result.error || 'Sub plan failed');
+                              return;
+                            }
+                            /* Partial success: keep only failed rows in
+                               the plan so the user can retry / edit. */
+                            const failedSymbols = new Set(
+                              (result.results || [])
+                                .filter((r) => !r.success)
+                                .map((r) => `${r.starterSymbol}__${r.benchSymbol}`),
+                            );
+                            const remainingPlan = subPlan.filter((e) =>
+                              failedSymbols.has(`${e.starterSymbol}__${e.benchSymbol}`),
+                            );
+                            setSubPlan(remainingPlan);
+                            if (result.error && remainingPlan.length > 0) {
+                              setSubError(
+                                `${result.appliedCount ?? 0} sub${(result.appliedCount ?? 0) === 1 ? '' : 's'} applied — ${result.error}`,
+                              );
+                            }
+                            /* Refresh portfolio so the new lineup shows. */
+                            const viewerQs = currentUser?.id ? `&viewerId=${currentUser.id}` : '';
+                            const res = await fetch(`/api/portfolios?id=${portfolioId}${viewerQs}`);
+                            const data = await res.json();
+                            if (data.success && data.portfolios?.length > 0) {
+                              setPortfolio(data.portfolios[0]);
+                            }
+                          }}
+                          className="stadium-btn stadium-btn-primary"
+                          style={{ padding: '8px 14px', fontSize: 12, minHeight: 36 }}
+                        >
+                          {subBusy
+                            ? 'Subbing…'
+                            : `Confirm ${subPlan.length} sub${subPlan.length === 1 ? '' : 's'}`}
+                        </button>
+                      </div>
+                    </div>
+                    {subError && (
+                      <div
+                        className="mono"
+                        style={{
+                          fontSize: 11,
+                          color: 'var(--ref-red)',
+                          padding: '6px 10px',
+                          background: 'oklch(0.65 0.22 25 / 0.08)',
+                          border: '1px solid oklch(0.65 0.22 25 / 0.3)',
+                          borderRadius: 6,
+                        }}
+                      >
+                        {subError}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {subPlan.map((entry, idx) => (
+                        <div
+                          key={`${entry.starterSymbol}-${entry.benchSymbol}`}
+                          className="flex items-center"
+                          style={{
+                            padding: '8px 12px',
+                            background: 'var(--surface)',
+                            border: '1px solid var(--line)',
+                            borderRadius: 6,
+                            gap: 10,
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          <span className="mono" style={{ fontSize: 10, color: 'var(--text-mute)', minWidth: 18 }}>
+                            {String(idx + 1).padStart(2, '0')}
+                          </span>
+                          <span className="display num" style={{ fontSize: 13, color: 'var(--ref-red)' }}>
+                            {entry.starterSymbol}
+                          </span>
+                          <Icon.Arrow size={12} style={{ color: 'var(--text-mute)' }} />
+                          <span className="display num" style={{ fontSize: 13, color: 'var(--pitch)' }}>
+                            {entry.benchSymbol}
+                          </span>
+                          <span
+                            className="pill"
+                            style={{
+                              fontSize: 9,
+                              padding: '2px 6px',
+                              background: 'var(--surface-2)',
+                              border: '1px solid var(--line)',
+                            }}
+                            title={
+                              entry.allocationStrategy === 'inherit'
+                                ? `Bench player takes the ${entry.starterAllocation.toFixed(1)}% directly`
+                                : `Redistribute the ${entry.starterAllocation.toFixed(1)}% across the other 10 starters`
+                            }
+                          >
+                            {entry.allocationStrategy.toUpperCase()}
+                          </span>
+                          <span
+                            className="mono"
+                            style={{
+                              fontSize: 10,
+                              color: 'var(--text-mute)',
+                              marginLeft: 'auto',
+                            }}
+                          >
+                            {entry.starterAllocation.toFixed(1)}%
+                          </span>
+                          <button
+                            type="button"
+                            disabled={subBusy}
+                            onClick={() =>
+                              setSubPlan((prev) =>
+                                prev.filter(
+                                  (e) =>
+                                    !(
+                                      e.starterSymbol === entry.starterSymbol &&
+                                      e.benchSymbol === entry.benchSymbol
+                                    ),
+                                ),
+                              )
+                            }
+                            className="stadium-btn stadium-btn-ghost"
+                            style={{
+                              padding: '4px 6px',
+                              fontSize: 10,
+                              minHeight: 28,
+                              color: 'var(--text-mute)',
+                            }}
+                            aria-label="Remove from plan"
+                          >
+                            <Icon.Close size={10} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mono" style={{ fontSize: 10, color: 'var(--text-mute)', lineHeight: 1.5 }}>
+                      Tap a starter&apos;s &quot;Sub off&quot; to add or replace a row. Picking the same
+                      starter again updates that row instead of stacking. Cap is{' '}
+                      {WEEKEND_SUB_MAX_PER_WEEKEND} subs per weekend.
+                    </div>
+                  </div>
+                )}
                 <SquadRoster
                   portfolio={portfolio}
                   squadView={squadView}
@@ -1435,7 +1644,9 @@ export default function PortfolioDetailPage() {
         }}
       />
 
-      {/* Weekend sub modal */}
+      {/* Weekend sub modal — picks a bench player and adds the pair
+          to the sub plan (item 17). Doesn't fire the swap; the plan
+          tray's Confirm button batches all pairs into one request. */}
       <Modal
         isOpen={!!subStarter}
         onClose={() => setSubStarter(null)}
@@ -1444,7 +1655,7 @@ export default function PortfolioDetailPage() {
             ? `Sub off ${subStarter.asset.symbol}`
             : 'Sub off'
         }
-        subtitle="WEEKEND WINDOW · PICK BENCH PLAYER"
+        subtitle="WEEKEND WINDOW · ADD TO SUB PLAN"
         size="md"
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1463,8 +1674,10 @@ export default function PortfolioDetailPage() {
             </div>
           )}
           <div className="mono" style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.5 }}>
-            Pick a reserve to come on. The starting XI always totals 100% —
-            choose how the outgoing player&apos;s {subStarter?.allocation?.toFixed(1) ?? '?'}% redistributes. Costs {WEEKEND_SUB_COST_XP} XP.
+            Pick a reserve to add to your sub plan — you can queue up to{' '}
+            {WEEKEND_SUB_MAX_PER_WEEKEND} subs per weekend before confirming. The starting XI
+            always totals 100% — choose how the outgoing player&apos;s{' '}
+            {subStarter?.allocation?.toFixed(1) ?? '?'}% redistributes. Each sub costs {WEEKEND_SUB_COST_XP} XP.
           </div>
 
           {/* Allocation-strategy radio — applies to this sub. */}
@@ -1517,33 +1730,54 @@ export default function PortfolioDetailPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {portfolio.players
               .filter((p) => p.isBench && p.asset)
-              .map((b) => (
+              .map((b) => {
+                /* Disable any bench player already used in the plan
+                   for a different swap so the user can't double-book
+                   the same bench symbol. Also disable the bench player
+                   that's already paired with this very starter (the
+                   intent is a different pair, not a re-add). */
+                const benchInPlan = subPlan.some(
+                  (e) => e.benchSymbol === b.asset!.symbol,
+                );
+                /* And disable the starter slot if we're already at
+                   the per-weekend cap. Note: the server enforces this
+                   too — this is purely UX. */
+                const planFull =
+                  subPlan.length >= WEEKEND_SUB_MAX_PER_WEEKEND;
+                const disabled = subBusy || benchInPlan || planFull;
+                return (
                 <button
                   key={b.positionId}
                   type="button"
-                  disabled={subBusy}
-                  onClick={async () => {
+                  disabled={disabled}
+                  title={
+                    benchInPlan
+                      ? `${b.asset!.symbol} is already in the sub plan`
+                      : planFull
+                      ? `Plan full — max ${WEEKEND_SUB_MAX_PER_WEEKEND} subs per weekend`
+                      : undefined
+                  }
+                  onClick={() => {
                     if (!subStarter?.asset || !b.asset) return;
-                    setSubBusy(true);
+                    /* Replace any existing entry for this starter so
+                       picking a different bench player just updates
+                       the same row instead of stacking. */
                     setSubError(null);
-                    const result = await weekendSwap(
-                      portfolio.id,
-                      subStarter.asset.symbol,
-                      b.asset.symbol,
-                      subStrategy,
-                    );
-                    setSubBusy(false);
-                    if (!result.success) {
-                      setSubError(result.error || 'Swap failed');
-                    } else {
-                      const viewerQs = currentUser?.id ? `&viewerId=${currentUser.id}` : '';
-                      const res = await fetch(`/api/portfolios?id=${portfolioId}${viewerQs}`);
-                      const data = await res.json();
-                      if (data.success && data.portfolios?.length > 0) {
-                        setPortfolio(data.portfolios[0]);
-                      }
-                      setSubStarter(null);
-                    }
+                    setSubPlan((prev) => {
+                      const filtered = prev.filter(
+                        (e) => e.starterSymbol !== subStarter.asset!.symbol,
+                      );
+                      return [
+                        ...filtered,
+                        {
+                          starterSymbol: subStarter.asset!.symbol,
+                          benchSymbol: b.asset!.symbol,
+                          allocationStrategy: subStrategy,
+                          starterAllocation: subStarter.allocation || 0,
+                        },
+                      ];
+                    });
+                    setSubStarter(null);
                   }}
                   className="stadium-card"
                   style={{
@@ -1584,7 +1818,8 @@ export default function PortfolioDetailPage() {
                     {formatPercent(b.asset!.dayChangePercent)}
                   </span>
                 </button>
-              ))}
+                );
+              })}
             {portfolio.players.filter((p) => p.isBench && p.asset).length === 0 && (
               <div
                 className="stadium-card"
