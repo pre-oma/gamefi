@@ -98,6 +98,10 @@ export default function PortfolioDetailPage() {
   } = useStore();
 
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
+  /* loading=true while the initial fetch is in flight. Without this,
+     `!portfolio` flashes the "Squad not found" screen for ~1s before
+     real data arrives — which made every refresh look like a 404. */
+  const [loading, setLoading] = useState(true);
   /* selectedPosition.position can be null for bench slots (synthetic
      positionId, no formation position). AssetSelector handles null
      position by skipping its risk-tier suggestions. */
@@ -135,10 +139,18 @@ export default function PortfolioDetailPage() {
   const [transferOut, setTransferOut] = useState<PortfolioPlayer | null>(null);
   const [transferError, setTransferError] = useState<string | null>(null);
 
+  /* Page-level error banner for the assign-asset flow (duplicate ticker,
+     PUT failure, network failure). Renders an inline stadium-card banner
+     above the lineup grid instead of firing window.alert(). Auto-clears
+     when the next assign attempt succeeds; user can also dismiss it. */
+  const [pageError, setPageError] = useState<string | null>(null);
+
   useEffect(() => { loadData(); }, [loadData]);
 
   useEffect(() => {
+    let cancelled = false;
     const fetchPortfolio = async () => {
+      setLoading(true);
       try {
         /* Pass viewerId so the API can apply the F7 privacy gate:
            non-owner viewers receive the last weekend's snapshot rather
@@ -146,14 +158,23 @@ export default function PortfolioDetailPage() {
         const viewerQs = currentUser?.id ? `&viewerId=${currentUser.id}` : '';
         const res = await fetch(`/api/portfolios?id=${portfolioId}${viewerQs}`);
         const data = await res.json();
+        if (cancelled) return;
         if (data.success && data.portfolios?.length > 0) {
           setPortfolio(data.portfolios[0]);
+        } else {
+          setPortfolio(null);
         }
       } catch (error) {
         console.error('Failed to fetch portfolio:', error);
+        if (!cancelled) setPortfolio(null);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     };
     fetchPortfolio();
+    return () => {
+      cancelled = true;
+    };
   }, [portfolioId, currentUser?.id]);
 
   useEffect(() => {
@@ -232,7 +253,7 @@ export default function PortfolioDetailPage() {
           p.asset?.symbol?.toUpperCase() === asset.symbol.toUpperCase(),
       );
       if (dup) {
-        alert(
+        setPageError(
           `${asset.symbol} is already in this squad. Each ticker can only be signed once — release the existing slot first.`,
         );
         setSelectedPosition(null);
@@ -272,13 +293,13 @@ export default function PortfolioDetailPage() {
       });
       const putData = await putRes.json();
       if (!putData.success) {
-        alert(putData.error || 'Failed to assign player.');
+        setPageError(putData.error || 'Failed to assign player.');
         setSelectedPosition(null);
         return;
       }
     } catch (e) {
       console.error('Position-assign PUT failed:', e);
-      alert('Network error — try again.');
+      setPageError('Network error — try again.');
       setSelectedPosition(null);
       return;
     }
@@ -287,6 +308,8 @@ export default function PortfolioDetailPage() {
     if (data.success && data.portfolios?.length > 0) {
       setPortfolio(data.portfolios[0]);
     }
+    // Clear any prior assign error now that this attempt succeeded.
+    setPageError(null);
     setSelectedPosition(null);
   };
 
@@ -327,6 +350,29 @@ export default function PortfolioDetailPage() {
       setTimeout(() => setCopied(false), 2000);
     }
   };
+
+  /* Three-state render: while the fetch is in flight show a loading
+     state; if the fetch resolved with no portfolio show the 404 copy;
+     otherwise fall through to the real page. */
+  if (loading) {
+    return (
+      <AppLayout flush>
+        <div style={{ padding: 60, textAlign: 'center' }}>
+          <div
+            className="stadium-spinner"
+            style={{ width: 32, height: 32, margin: '0 auto 14px' }}
+            aria-hidden="true"
+          />
+          <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>
+            Loading squad…
+          </div>
+          <div className="mono" style={{ fontSize: 11, color: 'var(--text-mute)' }}>
+            FETCHING LINEUP
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
 
   if (!portfolio) {
     return (
@@ -578,8 +624,12 @@ export default function PortfolioDetailPage() {
               SNAPSHOT
             </span>
             <div className="mono" style={{ fontSize: 11, color: 'var(--text-dim)', flex: 1 }}>
-              VIEWING LAST WEEKEND&apos;S LINEUP · GW {portfolio.snapshotGameweek ?? '?'} — owner&apos;s
-              in-progress moves are hidden until next Friday 4pm ET.
+              {/* Only render the "GW N" segment when we actually know the
+                  gameweek. Otherwise we used to print "GW ?" which leaked
+                  the null into the UI. */}
+              VIEWING LAST WEEKEND&apos;S LINEUP
+              {portfolio.snapshotGameweek != null ? ` · GW ${portfolio.snapshotGameweek}` : ''}
+              {' '}— owner&apos;s in-progress moves are hidden until next Friday 4pm ET.
             </div>
           </div>
         )}
@@ -599,6 +649,45 @@ export default function PortfolioDetailPage() {
               This manager&apos;s first snapshot is pending — full lineup visible after next
               Friday 4pm ET close.
             </div>
+          </div>
+        )}
+
+        {/* ===== Page-level error banner (assign duplicate / network / PUT
+            failure). Replaces the old window.alert() calls. */}
+        {pageError && (
+          <div
+            className="stadium-card"
+            style={{
+              padding: '10px 12px',
+              background: 'oklch(0.65 0.22 25 / 0.08)',
+              borderColor: 'oklch(0.65 0.22 25 / 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+            }}
+            role="alert"
+          >
+            <p
+              className="mono"
+              style={{ margin: 0, fontSize: 11, color: 'var(--ref-red)', flex: 1 }}
+            >
+              {pageError}
+            </p>
+            <button
+              type="button"
+              onClick={() => setPageError(null)}
+              className="stadium-btn stadium-btn-ghost"
+              style={{
+                padding: '4px 8px',
+                fontSize: 10,
+                color: 'var(--ref-red)',
+                borderColor: 'oklch(0.65 0.22 25 / 0.3)',
+                flexShrink: 0,
+              }}
+              aria-label="Dismiss error"
+            >
+              <Icon.Close size={10} />
+            </button>
           </div>
         )}
 
@@ -1768,11 +1857,11 @@ export default function PortfolioDetailPage() {
             <button
               type="button"
               onClick={async () => {
+                /* The Save button is already disabled when the weights
+                   don't sum to 100, so we don't need a runtime alert —
+                   the disabled state guards this path. */
                 const total = Object.values(editingWeights).reduce((sum, w) => sum + w, 0);
-                if (Math.abs(total - 100) > 0.1) {
-                  alert('Total weight must equal 100%');
-                  return;
-                }
+                if (Math.abs(total - 100) > 0.1) return;
                 const weights = Object.entries(editingWeights).map(([positionId, allocation]) => ({
                   positionId,
                   allocation,
