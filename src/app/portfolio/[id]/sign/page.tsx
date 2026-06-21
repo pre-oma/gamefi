@@ -25,6 +25,15 @@ import {
 } from '@/types';
 import { MOCK_ASSETS } from '@/data/assets';
 
+/* "Coach's pick" — 11 defensible blue-chips for new managers who
+   tap the Coach button. Low-beta names with broad sector coverage so
+   the starting XI isn't a single-sector bet. All symbols verified
+   present in MOCK_ASSETS. Order matches typical starter slot order
+   (GK → DEF → MID → FWD) for visual coherence when applied. */
+const COACH_BLUE_CHIP_SYMBOLS = [
+  'JNJ', 'KO', 'PG', 'VZ', 'JPM', 'MSFT', 'AAPL', 'BRK.B', 'WMT', 'PEP', 'COST',
+] as const;
+
 interface SlotEditState {
   positionId: string;
   position: Position | null;        // null for bench slots
@@ -292,6 +301,60 @@ export default function SignSquadPage() {
     });
   };
 
+  /* Coach's pick — populate the 11 STARTER slots with a defensible
+     blue-chip basket as pending changes. Respects the one-ticker-per
+     squad rule by skipping any blue-chip already in the squad (or
+     already pending in another slot). Leaves the bench alone — the
+     point is to give brand-new managers a confident starting XI they
+     can tweak, not to fill 22 slots. */
+  const applyCoachPick = () => {
+    setError(null);
+    const lookups: Asset[] = [];
+    for (const sym of COACH_BLUE_CHIP_SYMBOLS) {
+      const asset = MOCK_ASSETS.find(
+        (a) => a.symbol.toUpperCase() === sym.toUpperCase(),
+      );
+      if (asset) lookups.push(asset);
+    }
+    /* Build the set of symbols already occupying a slot (effective —
+       counts pending changes). Coach won't overwrite an existing pick
+       or duplicate a ticker. */
+    const occupied = new Set<string>();
+    for (const p of portfolio.players) {
+      const eff = effectiveAsset(p.positionId, p.asset);
+      if (eff?.symbol) occupied.add(eff.symbol.toUpperCase());
+    }
+    const queue = lookups.filter((a) => !occupied.has(a.symbol.toUpperCase()));
+
+    /* Walk the starter slots in order; for each empty (effective)
+       slot, take the next blue-chip from the queue. Build the new
+       pending map outside the setter so we can also compute the
+       user-visible signed count without re-running this logic. */
+    const nextPending = new Map(pending);
+    let signed = 0;
+    for (const p of starterPlayers) {
+      if (queue.length === 0) break;
+      const eff = effectiveAsset(p.positionId, p.asset);
+      if (eff) continue;
+      const pick = queue.shift();
+      if (pick) {
+        nextPending.set(p.positionId, pick);
+        signed += 1;
+      }
+    }
+    setPending(nextPending);
+
+    if (signed > 0) {
+      setPrefillNotice(
+        `Coach signed ${signed} starter${signed === 1 ? '' : 's'}. Tweak any slot before saving.`,
+      );
+    } else {
+      setPrefillNotice(
+        'Coach had nothing to sign — your starting XI is already full or all blue-chips are taken.',
+      );
+    }
+  };
+
   /* Single-shot save: build the full 22-slot players array from the
      starters + (existing-or-phantom) bench, apply each effective
      asset, and PUT in one request. Phantom bench rows that weren't on
@@ -389,6 +452,15 @@ export default function SignSquadPage() {
             <div style={{ width: 1, height: 30, background: 'var(--line)' }} />
             <button
               type="button"
+              onClick={applyCoachPick}
+              className="stadium-btn stadium-btn-ghost"
+              style={{ padding: '8px 12px', fontSize: 11 }}
+              title="Auto-fill empty starter slots with a defensible blue-chip basket"
+            >
+              Coach&apos;s pick
+            </button>
+            <button
+              type="button"
               onClick={() => router.push(`/portfolio/${portfolioId}`)}
               className="stadium-btn stadium-btn-ghost"
               style={{ padding: '8px 12px', fontSize: 11 }}
@@ -443,6 +515,48 @@ export default function SignSquadPage() {
               aria-label="Dismiss notice"
             >
               <Icon.Close size={10} />
+            </button>
+          </div>
+        )}
+
+        {/* Coach's pick banner — only when squad is COMPLETELY empty.
+            Sarah's #1 ask: brand-new managers stare at 22 empty slots
+            and bounce. Give them a one-tap way to land a defensible
+            starting XI they can edit from there. */}
+        {filledCount === 0 && (
+          <div
+            className="stadium-card flex flex-wrap items-center justify-between"
+            style={{
+              padding: '16px 18px',
+              gap: 14,
+              background: 'var(--pitch-tint)',
+              borderColor: 'oklch(0.72 0.21 145 / 0.45)',
+            }}
+          >
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="kicker" style={{ color: 'var(--pitch)' }}>
+                COACH&apos;S PICK · STARTING XI
+              </div>
+              <div
+                className="display"
+                style={{ fontSize: 16, letterSpacing: '-0.02em', marginTop: 4 }}
+              >
+                New to investing? Tap to fill your starting XI with 11 defensible blue-chips.
+              </div>
+              <div
+                className="mono"
+                style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 4, lineHeight: 1.5 }}
+              >
+                You can change anything later.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={applyCoachPick}
+              className="stadium-btn stadium-btn-primary"
+              style={{ padding: '10px 18px', fontSize: 13, flexShrink: 0 }}
+            >
+              Sign Coach&apos;s XI
             </button>
           </div>
         )}
