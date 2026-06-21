@@ -134,6 +134,7 @@ export const Modal: React.FC<ModalProps> = ({
                   type="button"
                   onClick={onClose}
                   aria-label="Close"
+                  className="tap44"
                   style={{
                     padding: 6,
                     background: 'transparent',

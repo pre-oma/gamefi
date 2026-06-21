@@ -61,7 +61,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed })
         <div className="flex items-center" style={{ gap: 14, overflow: 'hidden', flex: 1 }}>
           <button
             onClick={onMenuClick}
-            className="lg:hidden"
+            className="lg:hidden tap44"
             style={{
               padding: 8,
               background: 'transparent',
@@ -71,6 +71,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed })
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
             }}
             aria-label="Open menu"
           >
@@ -200,7 +201,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed })
 
           {/* Theme toggle */}
           <button
-            className="stadium-btn stadium-btn-ghost"
+            className="stadium-btn stadium-btn-ghost tap44"
             style={{ padding: '8px 10px' }}
             onClick={() => setTheme(isDark ? 'light' : 'dark')}
             aria-label="Toggle theme"
@@ -212,7 +213,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed })
           <div className="relative">
             <button
               onClick={() => setShowNotifications(!showNotifications)}
-              className="stadium-btn stadium-btn-ghost"
+              className="stadium-btn stadium-btn-ghost tap44"
               style={{ padding: '8px 10px', position: 'relative' }}
               aria-label="Notifications"
             >

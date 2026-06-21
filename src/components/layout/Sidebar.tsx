@@ -268,6 +268,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <button
                 onClick={onMobileClose}
+                aria-label="Close menu"
+                className="tap44"
                 style={{
                   position: 'absolute',
                   top: 12,
@@ -279,6 +281,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   color: 'var(--text-dim)',
                   cursor: 'pointer',
                   zIndex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
                 <Icon.Close size={16} />
