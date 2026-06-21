@@ -7,6 +7,8 @@ import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { BetaBanner } from '../BetaBanner';
 import { FeedbackWidget } from '../FeedbackWidget';
+import { Onboarding } from '../Onboarding';
+import { DailyReward } from '../DailyReward';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -101,6 +103,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children, flush = false })
       </main>
 
       <FeedbackWidget />
+
+      {/* Retention loops — were built + exported but never mounted.
+          Onboarding self-gates on its API + localStorage (first-time
+          users only). DailyReward shows once per logged-in session
+          and dismisses for the day via its own POST. */}
+      <Onboarding />
+      <DailyReward />
     </div>
   );
 };

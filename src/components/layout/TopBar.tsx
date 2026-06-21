@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/store/useStore';
 import { useTheme } from '@/components/ThemeProvider';
 import { Icon } from '@/components/stadium/Icon';
 import { calculateLevel } from '@/lib/utils';
+import { getMarketPillSpec, getMarketStatus, MarketStatus } from '@/lib/marketHours';
 
 interface TopBarProps {
   onMenuClick: () => void;
@@ -23,13 +24,30 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed })
   const levelInfo = currentUser ? calculateLevel(currentUser.xp) : null;
   const isDark = resolvedTheme === 'dark';
 
+  /* Live market-hours check. Re-evaluates every 60s while mounted so
+     the pill flips at the open/close bell without a page reload.
+     Initial value is computed synchronously so SSR matches the first
+     client render. */
+  const [marketStatus, setMarketStatus] = useState<MarketStatus>(() => getMarketStatus());
+  useEffect(() => {
+    const tick = () => setMarketStatus(getMarketStatus());
+    const id = setInterval(tick, 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
+  const pillSpec = getMarketPillSpec(marketStatus);
+
   return (
     <header
-      className="fixed top-0 right-0 z-30"
+      className={
+        'fixed top-0 right-0 z-30 ' +
+        /* Desktop only — reserve the sidebar rail. Mobile/iPad portrait
+           (<lg) leaves padding-left at 0 so the hamburger and MARKET
+           OPEN pill aren't shoved off-screen by the 220px inline pad. */
+        (sidebarCollapsed ? 'lg:pl-[72px]' : 'lg:pl-[220px]')
+      }
       style={{
         height: 64,
         left: 0,
-        paddingLeft: sidebarCollapsed ? 72 : 220,
         background: 'var(--bg)',
         borderBottom: '1px solid var(--line)',
         transition: 'padding-left .2s ease',
@@ -59,17 +77,40 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed })
             <Icon.Menu size={18} />
           </button>
 
-          {/* Forcing inline because Tailwind margin utilities won't read from CSS vars */}
+          {/* Market status pill — driven by real NYSE hours via
+              lib/marketHours.ts. Updates every 60s. Three states map
+              to ref-red (live), whistle/amber (pre/after-hours),
+              text-mute (closed). */}
           <span
-            className="pill pill-red"
-            style={{
-              flexShrink: 0,
-              background: 'oklch(0.65 0.22 25 / 0.14)',
-              color: 'var(--ref-red)',
-              border: '1px solid oklch(0.65 0.22 25 / 0.3)',
-            }}
+            className="pill"
+            style={(() => {
+              if (pillSpec.role === 'live') {
+                return {
+                  flexShrink: 0,
+                  background: 'oklch(0.65 0.22 25 / 0.14)',
+                  color: 'var(--ref-red)',
+                  border: '1px solid oklch(0.65 0.22 25 / 0.3)',
+                };
+              }
+              if (pillSpec.role === 'amber') {
+                return {
+                  flexShrink: 0,
+                  background: 'oklch(0.83 0.18 90 / 0.14)',
+                  color: 'var(--whistle)',
+                  border: '1px solid oklch(0.83 0.18 90 / 0.3)',
+                };
+              }
+              return {
+                flexShrink: 0,
+                background: 'var(--surface-2)',
+                color: 'var(--text-mute)',
+                border: '1px solid var(--line)',
+              };
+            })()}
+            title={`NYSE clock · ${pillSpec.label}`}
           >
-            <span className="live-dot" /> MARKET OPEN
+            {pillSpec.role === 'live' && <span className="live-dot" />}
+            {pillSpec.label}
           </span>
 
           {/* Season window pills — only render when seasonState loaded and a

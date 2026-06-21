@@ -62,23 +62,50 @@ export async function GET(request: NextRequest) {
 }
 
 // PUT - Update user
+//
+// Security: this route used to accept xp/level/max_teams/total_rewards
+// from the body — anyone with a userId could grant themselves any XP
+// they wanted. Those fields are now server-only; they're mutated
+// internally by /api/training/completions, /api/squad/swap,
+// /api/squad/transfer, /api/users (POST unlockTeamSlot), and
+// /api/challenges/settle. This route is for profile fields only.
+// requesterId must match the target id (band-aid for "no session
+// layer yet" — proper signed cookies in a later sprint).
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, displayName, bio, avatar, xp, level, maxTeams, totalRewards } = body;
+    const { id, requesterId, displayName, bio, avatar } = body;
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'User ID required' }, { status: 400 });
+    }
+
+    /* Reject any attempt to mutate the gameplay-bearing columns via
+       this route — they belong to the server. */
+    const forbiddenKeys = ['xp', 'level', 'maxTeams', 'totalRewards', 'max_teams', 'total_rewards'];
+    for (const k of forbiddenKeys) {
+      if (body[k] !== undefined) {
+        return NextResponse.json(
+          { success: false, error: `Field "${k}" cannot be updated via this route.` },
+          { status: 400 },
+        );
+      }
+    }
+
+    /* Identity check — requesterId comes from the caller's session
+       (currently localStorage; later: signed cookie). */
+    const effectiveRequester = requesterId || id;
+    if (effectiveRequester !== id) {
+      return NextResponse.json(
+        { success: false, error: 'Not authorized to update this user.' },
+        { status: 403 },
+      );
     }
 
     const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (displayName !== undefined) updateData.display_name = displayName;
     if (bio !== undefined) updateData.bio = bio;
     if (avatar !== undefined) updateData.avatar = avatar;
-    if (xp !== undefined) updateData.xp = xp;
-    if (level !== undefined) updateData.level = level;
-    if (maxTeams !== undefined) updateData.max_teams = maxTeams;
-    if (totalRewards !== undefined) updateData.total_rewards = totalRewards;
 
     const { data: updated, error } = await supabase
       .from('users')

@@ -250,14 +250,23 @@ export const useStore = create<AppState>((set, get) => ({
     if (!currentUser) return;
 
     try {
+      /* Server-only fields stripped client-side too — defense in depth
+         (server already rejects them with 400 since the auth band-aid). */
+      const { xp: _xp, level: _level, maxTeams: _mt, totalRewards: _tr, ...safe } = updates as Partial<User> & Record<string, unknown>;
+      void _xp; void _level; void _mt; void _tr;
+
       const response = await fetch('/api/users', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: currentUser.id, ...updates }),
+        body: JSON.stringify({
+          id: currentUser.id,
+          requesterId: currentUser.id,
+          ...safe,
+        }),
       });
 
       if (response.ok) {
-        const updatedUser = { ...currentUser, ...updates };
+        const updatedUser = { ...currentUser, ...safe } as User;
         set({ currentUser: updatedUser });
       }
     } catch (error) {
@@ -369,19 +378,15 @@ export const useStore = create<AppState>((set, get) => ({
 
     const portfolio = result.portfolio;
 
-    // Update user XP locally
+    /* Server already granted the +50 XP and returned the new totals.
+       Merge them directly — no more client-side PUT /api/users which
+       would now be rejected by the server-only XP guard. */
     const updatedUser = {
       ...currentUser,
       portfolios: [...currentUser.portfolios, portfolio.id],
-      xp: currentUser.xp + 50,
+      xp: typeof result.newXp === 'number' ? result.newXp : currentUser.xp,
+      level: typeof result.newLevel === 'number' ? result.newLevel : currentUser.level,
     };
-
-    // Update user in database
-    await fetch('/api/users', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: currentUser.id, xp: updatedUser.xp }),
-    });
 
     set({
       currentUser: updatedUser,
@@ -392,10 +397,13 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   updatePortfolio: async (id: string, updates: Partial<Portfolio>) => {
+    const { currentUser } = get();
     const response = await fetch('/api/portfolios', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, ...updates }),
+      /* userId required by the server-side ownership check on
+         /api/portfolios PUT (added in the auth band-aid sprint). */
+      body: JSON.stringify({ id, userId: currentUser?.id, ...updates }),
     });
 
     const result = await response.json();
@@ -561,6 +569,9 @@ export const useStore = create<AppState>((set, get) => ({
         players: cloneSourcePlayers,
         isPublic: true,
         tags: original.tags,
+        /* Signal to the server this is a clone (so it grants +25 XP
+           instead of +50) and to record cloned_from on the row. */
+        clonedFrom: portfolioId,
       }),
     });
 
@@ -588,17 +599,14 @@ export const useStore = create<AppState>((set, get) => ({
       ),
     });
 
+    /* Server granted the +25 XP and returned the new totals on the
+       POST response. No client-side PUT /api/users needed. */
     const updatedUser = {
       ...currentUser,
       portfolios: [...currentUser.portfolios, cloned.id],
-      xp: currentUser.xp + 25,
+      xp: typeof result.newXp === 'number' ? result.newXp : currentUser.xp,
+      level: typeof result.newLevel === 'number' ? result.newLevel : currentUser.level,
     };
-
-    await fetch('/api/users', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: currentUser.id, xp: updatedUser.xp }),
-    });
 
     set({
       currentUser: updatedUser,

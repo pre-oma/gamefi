@@ -95,10 +95,27 @@ export async function GET(request: NextRequest) {
 }
 
 // POST - Create a new portfolio
+//
+// Awards XP server-side based on whether this is a fresh creation
+// (+50) or a clone (+25, signaled by clonedFrom). Previously the
+// client called PUT /api/users to set its own XP after create — which
+// meant anyone could grant themselves arbitrary XP. Now the only
+// portfolio-creation XP path is here.
+const PORTFOLIO_CREATE_XP = 50;
+const PORTFOLIO_CLONE_XP = 25;
+
+function levelForXp(xp: number): number {
+  if (xp < 1000) return 1;
+  if (xp < 3000) return 2;
+  if (xp < 5000) return 3;
+  if (xp < 10000) return 4;
+  return 5;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { userId, name, description, formation, players, isPublic, tags } = body;
+    const { userId, name, description, formation, players, isPublic, tags, clonedFrom } = body;
 
     if (!userId || !name || !formation) {
       return NextResponse.json(
@@ -141,6 +158,7 @@ export async function POST(request: NextRequest) {
         players: JSON.stringify(players || []),
         is_public: isPublic !== false,
         tags: tags || [],
+        cloned_from: clonedFrom || null,
         created_at: now,
         updated_at: now,
       })
@@ -149,6 +167,29 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
+
+    /* Award XP for the creation. Fresh = +50, clone = +25. Server-side
+       so the client can't forge its own grant. Updates returned in the
+       response so the store can sync currentUser without a refetch. */
+    const xpDelta = clonedFrom ? PORTFOLIO_CLONE_XP : PORTFOLIO_CREATE_XP;
+    let newXp: number | null = null;
+    let newLevel: number | null = null;
+    if (xpDelta > 0) {
+      const { data: cur } = await supabase
+        .from('users')
+        .select('xp')
+        .eq('id', userId)
+        .single();
+      const baseXp = cur?.xp ?? 0;
+      const nextXp = baseXp + xpDelta;
+      newXp = nextXp;
+      newLevel = levelForXp(nextXp);
+      const { error: xpErr } = await supabase
+        .from('users')
+        .update({ xp: nextXp, level: newLevel, updated_at: now })
+        .eq('id', userId);
+      if (xpErr) console.error('Failed to grant portfolio-create XP:', xpErr);
     }
 
     const portfolio: Portfolio = {
@@ -169,7 +210,15 @@ export async function POST(request: NextRequest) {
       tags: newPortfolio.tags || [],
     };
 
-    return NextResponse.json({ success: true, portfolio });
+    return NextResponse.json({
+      success: true,
+      portfolio,
+      /* Caller merges these into currentUser so XP/level stay in sync
+         without a separate /api/users fetch. */
+      xpAwarded: xpDelta,
+      newXp,
+      newLevel,
+    });
   } catch (error) {
     console.error('Create portfolio error:', error);
     return NextResponse.json({ success: false, error: 'Failed to create portfolio' }, { status: 500 });
@@ -180,10 +229,38 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, name, description, formation, players, isPublic, tags } = body;
+    const { id, userId, name, description, formation, players, isPublic, tags } = body;
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'Portfolio ID required' }, { status: 400 });
+    }
+
+    /* Ownership check — without session auth (separate sprint), the
+       client passes its userId in the body and we verify it matches
+       the resource owner. This stops "edit anyone's squad with curl"
+       without rebuilding the auth layer. We require userId so older
+       callers that didn't send it must be updated. */
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'userId required for portfolio update' },
+        { status: 400 },
+      );
+    }
+    {
+      const { data: owned, error: ownErr } = await supabase
+        .from('portfolios')
+        .select('user_id')
+        .eq('id', id)
+        .single();
+      if (ownErr || !owned) {
+        return NextResponse.json({ success: false, error: 'Portfolio not found' }, { status: 404 });
+      }
+      if (owned.user_id !== userId) {
+        return NextResponse.json(
+          { success: false, error: 'Not authorized to update this portfolio' },
+          { status: 403 },
+        );
+      }
     }
 
     /* One-ticker-per-squad rule: reject if the incoming players array

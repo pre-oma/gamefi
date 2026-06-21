@@ -264,7 +264,11 @@ export default function PortfolioDetailPage() {
       const putRes = await fetch('/api/portfolios', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: portfolio.id, players: nextPlayers }),
+        body: JSON.stringify({
+          id: portfolio.id,
+          userId: currentUser?.id,
+          players: nextPlayers,
+        }),
       });
       const putData = await putRes.json();
       if (!putData.success) {

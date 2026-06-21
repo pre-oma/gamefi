@@ -20,11 +20,16 @@ export default function SettingsPage() {
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
-  // Preferences
+  // Preferences — hydrated from /api/preferences on mount. Defaulting
+  // to `true` here was misleading: Save then overwrote whatever the
+  // user had actually stored. We now wait for the GET to populate
+  // (preferencesLoaded gates the Save button so we never round-trip
+  // a guess to the server).
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [priceAlertNotifications, setPriceAlertNotifications] = useState(true);
   const [preferencesSaved, setPreferencesSaved] = useState(false);
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
 
   // Referral
   const [referralCode, setReferralCode] = useState('');
@@ -38,6 +43,32 @@ export default function SettingsPage() {
     if (currentUser) {
       setReferralCode(currentUser.id.substring(0, 8).toUpperCase());
     }
+  }, [currentUser]);
+
+  /* Hydrate notification toggles from the server so Save doesn't
+     silently overwrite whatever the user actually had stored. */
+  useEffect(() => {
+    if (!currentUser) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/preferences?userId=${currentUser.id}`);
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.success && data.preferences?.notifications) {
+          setEmailNotifications(!!data.preferences.notifications.email);
+          setPushNotifications(!!data.preferences.notifications.push);
+          setPriceAlertNotifications(!!data.preferences.notifications.priceAlerts);
+        }
+      } catch (e) {
+        console.error('Failed to load preferences:', e);
+      } finally {
+        if (!cancelled) setPreferencesLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [currentUser]);
 
   const handleCopyReferralCode = async () => {
@@ -92,8 +123,10 @@ export default function SettingsPage() {
 
   const handleSavePreferences = async () => {
     try {
+      /* Route only exports GET + PUT — the prior POST always 405'd
+         so Save was a no-op. Match the API's verb. */
       await fetch('/api/preferences', {
-        method: 'POST',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: currentUser?.id,
