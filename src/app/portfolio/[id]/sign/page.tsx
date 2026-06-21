@@ -37,7 +37,7 @@ export default function SignSquadPage() {
   const searchParams = useSearchParams();
   const portfolioId = params?.id as string;
   const prefillSymbol = searchParams?.get('prefill') || null;
-  const { currentUser, assignAssetToPosition } = useStore();
+  const { currentUser, updatePortfolio } = useStore();
 
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [pending, setPending] = useState<Map<string, Asset | null>>(new Map());
@@ -217,12 +217,16 @@ export default function SignSquadPage() {
     ),
   ];
 
-  const filledCount = portfolio.players.reduce((n, p) => {
+  /* Count across the EFFECTIVE 22 slots (starters + bench, where bench
+     includes phantom rows for legacy 11-player portfolios). Counting
+     portfolio.players.length undercounted to 11 for legacy squads. */
+  const allEffectiveSlots = [...starterPlayers, ...benchPlayers];
+  const filledCount = allEffectiveSlots.reduce((n, p) => {
     const asset = effectiveAsset(p.positionId, p.asset);
     return asset ? n + 1 : n;
   }, 0);
-  const totalSlots = portfolio.players.length;
-
+  const totalSlots = allEffectiveSlots.length;
+  const emptyCount = totalSlots - filledCount;
   const pendingCount = pending.size;
 
   /* Open the AssetSelector for a specific slot. For starters we look
@@ -288,6 +292,13 @@ export default function SignSquadPage() {
     });
   };
 
+  /* Single-shot save: build the full 22-slot players array from the
+     starters + (existing-or-phantom) bench, apply each effective
+     asset, and PUT in one request. Phantom bench rows that weren't on
+     the server yet get inserted as new entries. Earlier this looped
+     assignAssetToPosition which reads from state.portfolios — but
+     /sign loads the portfolio into local state only, so that store
+     lookup returned undefined and every assign was a silent no-op. */
   const saveAll = async () => {
     if (pending.size === 0) {
       router.push(`/portfolio/${portfolioId}`);
@@ -296,13 +307,23 @@ export default function SignSquadPage() {
     setSaving(true);
     setError(null);
     try {
-      for (const [positionId, asset] of pending.entries()) {
-        await assignAssetToPosition(portfolioId, positionId, asset);
-      }
+      const allSlots = [...starterPlayers, ...benchPlayers];
+      const newPlayers: PortfolioPlayer[] = allSlots.map((p) => {
+        const eff = effectiveAsset(p.positionId, p.asset);
+        return {
+          positionId: p.positionId,
+          asset: eff,
+          allocation: p.allocation,
+          ...(p.isBench ? { isBench: true } : {}),
+        };
+      });
+      await updatePortfolio(portfolioId, { players: newPlayers });
+      /* Refetch so the user lands on the squad detail with the new
+         data instead of a stale store snapshot. */
       router.push(`/portfolio/${portfolioId}`);
     } catch (e) {
       console.error('Bulk save failed:', e);
-      setError('Some assignments failed. Try again or skip for now.');
+      setError('Save failed. Check your connection and try again.');
     } finally {
       setSaving(false);
     }
@@ -346,6 +367,23 @@ export default function SignSquadPage() {
                 }}
               >
                 {filledCount} / {totalSlots}
+              </div>
+            </div>
+            <div style={{ width: 1, height: 30, background: 'var(--line)' }} />
+            <div>
+              <div className="kicker">OPEN</div>
+              <div
+                className="mono num"
+                style={{
+                  fontSize: 18,
+                  fontWeight: 700,
+                  color: emptyCount === 0 ? 'var(--text-mute)' : 'var(--whistle)',
+                  letterSpacing: '-0.02em',
+                  marginTop: 2,
+                }}
+                title={`${emptyCount} slot${emptyCount === 1 ? '' : 's'} still empty`}
+              >
+                {emptyCount}
               </div>
             </div>
             <div style={{ width: 1, height: 30, background: 'var(--line)' }} />
@@ -468,13 +506,36 @@ const SlotColumn: React.FC<{
   onEdit: (player: PortfolioPlayer) => void;
   onClear: (positionId: string) => void;
   onCancel: (positionId: string) => void;
-}> = ({ title, subtitle, players, formationPositions, effectiveAsset, pending, onEdit, onClear, onCancel }) => (
+}> = ({ title, subtitle, players, formationPositions, effectiveAsset, pending, onEdit, onClear, onCancel }) => {
+  const emptyInSection = players.reduce(
+    (n, p) => (effectiveAsset(p.positionId, p.asset) ? n : n + 1),
+    0,
+  );
+  return (
   <div className="stadium-card" style={{ padding: 16 }}>
-    <div style={{ marginBottom: 12 }}>
-      <div className="kicker">{title}</div>
-      <div className="mono" style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 2 }}>
-        {subtitle}
+    <div className="flex items-start justify-between" style={{ gap: 10, marginBottom: 12 }}>
+      <div>
+        <div className="kicker">{title}</div>
+        <div className="mono" style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 2 }}>
+          {subtitle}
+        </div>
       </div>
+      <span
+        className="mono"
+        style={{
+          padding: '4px 8px',
+          fontSize: 10,
+          fontWeight: 700,
+          background: emptyInSection === 0 ? 'var(--surface-2)' : 'oklch(0.83 0.18 90 / 0.15)',
+          color: emptyInSection === 0 ? 'var(--text-mute)' : 'var(--whistle)',
+          border: '1px solid ' + (emptyInSection === 0 ? 'var(--line)' : 'oklch(0.83 0.18 90 / 0.4)'),
+          borderRadius: 4,
+          letterSpacing: '0.06em',
+          flexShrink: 0,
+        }}
+      >
+        {emptyInSection === 0 ? 'FULL' : `${emptyInSection} OPEN`}
+      </span>
     </div>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {players.map((player, idx) => {
@@ -595,4 +656,5 @@ const SlotColumn: React.FC<{
       })}
     </div>
   </div>
-);
+  );
+};
