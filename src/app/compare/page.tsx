@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import useSWR from 'swr';
 import { useStore } from '@/store/useStore';
 import { AppLayout } from '@/components';
 import {
@@ -27,6 +27,7 @@ import {
 } from '@/types';
 import { calculatePortfolioPerformance, formatPercent } from '@/lib/utils';
 import {
+  fetchBenchmarkHistoricalData,
   getMultipleBenchmarkPerformances,
   getMultipleCustomSymbolPerformances,
 } from '@/lib/benchmarkData';
@@ -41,59 +42,65 @@ const MIN_PORTFOLIOS = 1;
 export default function ComparePage() {
   const { currentUser, loadData, portfolios, publicPortfolios } = useStore();
   const [selectedIds, setSelectedIds] = useState<string[]>(['']);
-  const [users, setUsers] = useState<Map<string, User>>(new Map());
   const [selectedBenchmarks, setSelectedBenchmarks] = useState<BenchmarkSymbol[]>([]);
-  const [benchmarkPerformances, setBenchmarkPerformances] = useState<BenchmarkPerformance[]>([]);
   const [timeframe, setTimeframe] = useState<ComparisonTimeframe>('1M');
-  const [loadingBenchmarks, setLoadingBenchmarks] = useState(false);
   const [customDateRange, setCustomDateRange] = useState<CustomDateRange | null>(null);
   const [customSymbols, setCustomSymbols] = useState<CustomComparisonSymbol[]>([]);
-  const [customSymbolPerformances, setCustomSymbolPerformances] = useState<BenchmarkPerformance[]>([]);
-  const [portfolioHistoricalData, setPortfolioHistoricalData] = useState<Map<string, PortfolioHistoricalPoint[]>>(new Map());
-  const [loadingPortfolioData, setLoadingPortfolioData] = useState(false);
-  const [fundamentalsMap, setFundamentalsMap] = useState<Map<string, AssetFundamentals>>(new Map());
-  const [loadingFundamentals, setLoadingFundamentals] = useState(false);
-  const [spyBenchmarkReturn, setSpyBenchmarkReturn] = useState<number | null>(null);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  // Fetch SPY benchmark data for alpha calculation (always fetch regardless of user selection)
-  useEffect(() => {
-    const fetchSpyForAlpha = async () => {
-      try {
-        const { fetchBenchmarkHistoricalData } = await import('@/lib/benchmarkData');
-        const spyData = await fetchBenchmarkHistoricalData('SPY', timeframe, customDateRange);
-        if (spyData.length > 1) {
-          const firstValue = spyData[0].close;
-          const lastValue = spyData[spyData.length - 1].close;
-          const spyReturn = ((lastValue - firstValue) / firstValue) * 100;
-          setSpyBenchmarkReturn(spyReturn);
-        }
-      } catch (error) {
-        console.error('Failed to fetch SPY for alpha calculation:', error);
-        setSpyBenchmarkReturn(null);
-      }
-    };
-
-    fetchSpyForAlpha();
-  }, [timeframe, customDateRange]);
 
   // Helper to get portfolio by ID from store
   const getPortfolioById = useCallback((id: string): Portfolio | null => {
     return portfolios.find(p => p.id === id) || publicPortfolios.find(p => p.id === id) || null;
   }, [portfolios, publicPortfolios]);
 
-  // Load all users for displaying portfolio owners
-  useEffect(() => {
-    const fetchUsers = async () => {
-      const allPortfolios = [...portfolios, ...publicPortfolios];
-      const userIds = new Set(allPortfolios.map((p) => p.userId));
-      const userMap = new Map<string, User>();
+  /* --------------------------------------------------------------
+     SWR-backed fetches (item 20). Each useSWR call gives us:
+     - per-key cache + dedupe (re-mounting / switching back to the
+       page reuses the cached payload)
+     - automatic stale-while-revalidate handling — we never paint
+       a response that's older than the current key
+     - built-in cancellation on key change so old responses can't
+       clobber newer state (Marcus's stale-response complaint)
 
+     Keys are arrays so SWR's default hash distinguishes
+     selection/timeframe permutations cleanly.
+     -------------------------------------------------------------- */
+
+  // SPY benchmark for alpha — always fetched, keyed on timeframe + range.
+  const { data: spyBenchmarkReturn = null } = useSWR<number | null>(
+    ['compare:spy-alpha', timeframe, customDateRange],
+    async () => {
+      const spyData = await fetchBenchmarkHistoricalData('SPY', timeframe, customDateRange);
+      if (spyData.length <= 1) return null;
+      const firstValue = spyData[0].close;
+      const lastValue = spyData[spyData.length - 1].close;
+      return ((lastValue - firstValue) / firstValue) * 100;
+    },
+    {
+      /* Alpha is informational — don't churn the chart on focus.
+         The data changes when the user picks a new timeframe, not
+         on tab switches. */
+      revalidateOnFocus: false,
+    },
+  );
+
+  // Portfolio owners — keyed on the joined id list so adding/removing
+  // a portfolio invalidates cleanly.
+  const ownerIdsKey = useMemo(() => {
+    const allPortfolios = [...portfolios, ...publicPortfolios];
+    const ids = Array.from(new Set(allPortfolios.map((p) => p.userId))).sort();
+    return ids.length > 0 ? ids : null;
+  }, [portfolios, publicPortfolios]);
+
+  const { data: users = new Map<string, User>() } = useSWR<Map<string, User>>(
+    ownerIdsKey ? ['compare:users', ownerIdsKey] : null,
+    async ([, ids]) => {
+      const userMap = new Map<string, User>();
       await Promise.all(
-        Array.from(userIds).map(async (userId) => {
+        (ids as string[]).map(async (userId) => {
           try {
             const res = await fetch(`/api/users?id=${userId}`);
             const data = await res.json();
@@ -103,138 +110,115 @@ export default function ComparePage() {
           } catch (error) {
             console.error(`Failed to fetch user ${userId}:`, error);
           }
-        })
+        }),
       );
+      return userMap;
+    },
+    { revalidateOnFocus: false },
+  );
 
-      setUsers(userMap);
-    };
+  // Benchmark performances — combines predefined + custom symbols.
+  // Empty selection → null key so SWR skips the fetch entirely.
+  const benchmarkKey = selectedBenchmarks.length > 0
+    ? ['compare:benchmarks', selectedBenchmarks, timeframe, customDateRange] as const
+    : null;
+  const {
+    data: benchmarkPerformances = [] as BenchmarkPerformance[],
+    isLoading: loadingPredefinedBenchmarks,
+  } = useSWR<BenchmarkPerformance[]>(
+    benchmarkKey,
+    async ([, syms, tf, range]) =>
+      getMultipleBenchmarkPerformances(
+        syms as BenchmarkSymbol[],
+        tf as ComparisonTimeframe,
+        range as CustomDateRange | null,
+      ),
+    { revalidateOnFocus: false, keepPreviousData: true },
+  );
 
-    if (portfolios.length > 0 || publicPortfolios.length > 0) {
-      fetchUsers();
-    }
-  }, [portfolios, publicPortfolios]);
+  const customKey = customSymbols.length > 0
+    ? ['compare:custom-symbols', customSymbols, timeframe, customDateRange] as const
+    : null;
+  const {
+    data: customSymbolPerformances = [] as BenchmarkPerformance[],
+    isLoading: loadingCustomSymbols,
+  } = useSWR<BenchmarkPerformance[]>(
+    customKey,
+    async ([, syms, tf, range]) =>
+      getMultipleCustomSymbolPerformances(
+        syms as CustomComparisonSymbol[],
+        tf as ComparisonTimeframe,
+        range as CustomDateRange | null,
+      ),
+    { revalidateOnFocus: false, keepPreviousData: true },
+  );
 
-  // Fetch benchmark data when selected benchmarks, timeframe, or custom date range changes
-  useEffect(() => {
-    const fetchAllBenchmarks = async () => {
-      setLoadingBenchmarks(true);
-      try {
-        // Fetch predefined benchmarks
-        let benchmarkResults: BenchmarkPerformance[] = [];
-        if (selectedBenchmarks.length > 0) {
-          benchmarkResults = await getMultipleBenchmarkPerformances(
-            selectedBenchmarks,
-            timeframe,
-            customDateRange
-          );
-        }
-        setBenchmarkPerformances(benchmarkResults);
+  const loadingBenchmarks = loadingPredefinedBenchmarks || loadingCustomSymbols;
 
-        // Fetch custom symbols
-        let customResults: BenchmarkPerformance[] = [];
-        if (customSymbols.length > 0) {
-          customResults = await getMultipleCustomSymbolPerformances(
-            customSymbols,
-            timeframe,
-            customDateRange
-          );
-        }
-        setCustomSymbolPerformances(customResults);
-      } catch (error) {
-        console.error('Failed to fetch benchmark data:', error);
-        setBenchmarkPerformances([]);
-        setCustomSymbolPerformances([]);
-      } finally {
-        setLoadingBenchmarks(false);
+  // Portfolio historical data — one Map per selection. Key on the
+  // sorted, filtered id list so reordering selectedIds doesn't
+  // invalidate; key on timeframe/range so swapping refetches.
+  const selectedPortfolioIds = useMemo(
+    () => selectedIds.filter((id) => id !== '').sort(),
+    [selectedIds],
+  );
+
+  const portfolioHistoricalKey = selectedPortfolioIds.length > 0
+    ? ['compare:portfolio-historical', selectedPortfolioIds, timeframe, customDateRange] as const
+    : null;
+
+  const {
+    data: portfolioHistoricalData = new Map<string, PortfolioHistoricalPoint[]>(),
+    isLoading: loadingPortfolioData,
+  } = useSWR<Map<string, PortfolioHistoricalPoint[]>>(
+    portfolioHistoricalKey,
+    async ([, ids, tf, range]) => {
+      const newDataMap = new Map<string, PortfolioHistoricalPoint[]>();
+      await Promise.all(
+        (ids as string[]).map(async (id) => {
+          const portfolio = getPortfolioById(id);
+          if (portfolio) {
+            const historicalData = await calculatePortfolioHistoricalData(
+              portfolio,
+              tf as ComparisonTimeframe,
+              range as CustomDateRange | null,
+            );
+            newDataMap.set(id, historicalData);
+          }
+        }),
+      );
+      return newDataMap;
+    },
+    { revalidateOnFocus: false, keepPreviousData: true },
+  );
+
+  // Fundamentals — keyed on the sorted unique symbol set across all
+  // selected portfolios. Independent of timeframe (fundamentals are
+  // a snapshot, not a window).
+  const fundamentalsKey = useMemo(() => {
+    if (selectedPortfolioIds.length === 0) return null;
+    const allSymbols = new Set<string>();
+    selectedPortfolioIds.forEach((id) => {
+      const portfolio = getPortfolioById(id);
+      if (portfolio) {
+        portfolio.players.forEach((player) => {
+          if (player.asset?.symbol) {
+            allSymbols.add(player.asset.symbol.toUpperCase());
+          }
+        });
       }
-    };
+    });
+    if (allSymbols.size === 0) return null;
+    return ['compare:fundamentals', Array.from(allSymbols).sort()] as const;
+  }, [selectedPortfolioIds, getPortfolioById]);
 
-    if (selectedBenchmarks.length > 0 || customSymbols.length > 0) {
-      fetchAllBenchmarks();
-    } else {
-      setBenchmarkPerformances([]);
-      setCustomSymbolPerformances([]);
-    }
-  }, [selectedBenchmarks, customSymbols, timeframe, customDateRange]);
-
-  // Fetch real historical data for selected portfolios
-  useEffect(() => {
-    const fetchPortfolioHistorical = async () => {
-      const portfolioIds = selectedIds.filter((id) => id !== '');
-      if (portfolioIds.length === 0) {
-        setPortfolioHistoricalData(new Map());
-        return;
-      }
-
-      setLoadingPortfolioData(true);
-      try {
-        const newDataMap = new Map<string, PortfolioHistoricalPoint[]>();
-
-        await Promise.all(
-          portfolioIds.map(async (id) => {
-            const portfolio = getPortfolioById(id);
-            if (portfolio) {
-              const historicalData = await calculatePortfolioHistoricalData(
-                portfolio,
-                timeframe,
-                customDateRange
-              );
-              newDataMap.set(id, historicalData);
-            }
-          })
-        );
-
-        setPortfolioHistoricalData(newDataMap);
-      } catch (error) {
-        console.error('Failed to fetch portfolio historical data:', error);
-      } finally {
-        setLoadingPortfolioData(false);
-      }
-    };
-
-    fetchPortfolioHistorical();
-  }, [selectedIds, timeframe, customDateRange]);
-
-  // Fetch fundamentals for all assets in selected portfolios
-  useEffect(() => {
-    const fetchFundamentals = async () => {
-      const portfolioIds = selectedIds.filter((id) => id !== '');
-      if (portfolioIds.length === 0) {
-        setFundamentalsMap(new Map());
-        return;
-      }
-
-      // Collect all unique symbols from selected portfolios
-      const allSymbols = new Set<string>();
-      portfolioIds.forEach((id) => {
-        const portfolio = getPortfolioById(id);
-        if (portfolio) {
-          portfolio.players.forEach((player) => {
-            if (player.asset?.symbol) {
-              allSymbols.add(player.asset.symbol.toUpperCase());
-            }
-          });
-        }
-      });
-
-      if (allSymbols.size === 0) {
-        setFundamentalsMap(new Map());
-        return;
-      }
-
-      setLoadingFundamentals(true);
-      try {
-        const fundamentals = await fetchMultipleFundamentals(Array.from(allSymbols));
-        setFundamentalsMap(fundamentals);
-      } catch (error) {
-        console.error('Failed to fetch fundamentals:', error);
-      } finally {
-        setLoadingFundamentals(false);
-      }
-    };
-
-    fetchFundamentals();
-  }, [selectedIds]);
+  const { data: fundamentalsMap = new Map<string, AssetFundamentals>() } = useSWR<
+    Map<string, AssetFundamentals>
+  >(
+    fundamentalsKey,
+    async ([, syms]) => fetchMultipleFundamentals(syms as string[]),
+    { revalidateOnFocus: false, keepPreviousData: true },
+  );
 
   // Get selected portfolios with their performances
   const selectedPortfolios = useMemo(() => {
