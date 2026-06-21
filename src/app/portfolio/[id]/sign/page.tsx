@@ -12,7 +12,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { AppLayout, AssetSelector } from '@/components';
+import { AppLayout, AssetSelector, Modal } from '@/components';
 import { Icon } from '@/components/stadium/Icon';
 import { useStore } from '@/store/useStore';
 import {
@@ -22,8 +22,78 @@ import {
   FORMATIONS,
   Asset,
   SQUAD_BENCH_COUNT,
+  SQUAD_TOTAL_COUNT,
 } from '@/types';
 import { MOCK_ASSETS } from '@/data/assets';
+
+/* Parse a freeform string of tickers — accepts comma-separated,
+   newline-separated, or a JSON array. Returns trimmed, uppercased,
+   deduped symbols. Used by both the CSV paste modal (item 16) and the
+   ?prefill=AAPL,MSFT URL flow (item 19). */
+function parseTickerInput(raw: string): string[] {
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  let tokens: string[] = [];
+  /* Try JSON array first — must start with [ and parse cleanly into
+     an array of strings. */
+  if (trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        tokens = parsed.map((v) => String(v));
+      }
+    } catch {
+      /* Not valid JSON — fall through to delimiter parsing. */
+    }
+  }
+  if (tokens.length === 0) {
+    /* Split on comma or any whitespace (newline, tab, space). */
+    tokens = trimmed.split(/[\s,]+/);
+  }
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const t of tokens) {
+    const sym = t.trim().toUpperCase();
+    if (!sym) continue;
+    /* Strip common wrappers like quotes or trailing commas that JSON
+       fallback leaves behind ('"AAPL"' → 'AAPL'). */
+    const clean = sym.replace(/^['"]+|['"]+$/g, '').replace(/[,;]+$/, '');
+    if (!clean || seen.has(clean)) continue;
+    seen.add(clean);
+    out.push(clean);
+  }
+  return out;
+}
+
+/* Resolve a list of symbols to Asset objects. Tries MOCK_ASSETS first
+   (instant), then per-symbol /api/yahoo-finance for unknowns. Returns
+   { resolved, unknown } so the caller can surface which symbols 404'd.
+   Caller is responsible for dedupe-against-portfolio. */
+async function resolveSymbols(
+  symbols: string[],
+): Promise<{ resolved: Asset[]; unknown: string[] }> {
+  const resolved: Asset[] = [];
+  const unknown: string[] = [];
+  for (const sym of symbols) {
+    const mock = MOCK_ASSETS.find((a) => a.symbol.toUpperCase() === sym);
+    if (mock) {
+      resolved.push(mock);
+      continue;
+    }
+    try {
+      const res = await fetch(`/api/yahoo-finance?symbol=${encodeURIComponent(sym)}`);
+      const data = await res.json();
+      if (data.success && data.asset) {
+        resolved.push(data.asset as Asset);
+      } else {
+        unknown.push(sym);
+      }
+    } catch {
+      unknown.push(sym);
+    }
+  }
+  return { resolved, unknown };
+}
 
 /* "Coach's pick" — 11 defensible blue-chips for new managers who
    tap the Coach button. Low-beta names with broad sector coverage so
@@ -58,85 +128,98 @@ export default function SignSquadPage() {
   const [prefillApplied, setPrefillApplied] = useState(false);
   const [prefillNotice, setPrefillNotice] = useState<string | null>(null);
 
-  /* When the page is opened from the Market "Sign QQQ" button, the
-     ticker arrives via ?prefill=QQQ. Look it up (mock catalogue first,
-     then Yahoo) and stash it in the first empty STARTER slot as a
-     pending change. User can move/save/discard from there. */
+  /* CSV-paste modal (item 16) — opens from the "Paste tickers" button
+     in the header strip. Accepts comma/newline/JSON-array input. */
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState('');
+  const [pasteBusy, setPasteBusy] = useState(false);
+  const [pastePreview, setPastePreview] = useState<{
+    valid: Asset[];
+    unknown: string[];
+    duplicates: string[];
+    overflowSymbols: string[];
+  } | null>(null);
+  const [pasteError, setPasteError] = useState<string | null>(null);
+
+  /* When the page is opened from the Market "Sign QQQ" button or via
+     a hand-built ?prefill=AAPL,MSFT URL (item 19), parse the symbols
+     and stash them in pending. Starters first, then bench. Respects
+     the one-ticker-per-squad rule and surfaces a combined notice. */
   useEffect(() => {
     if (prefillApplied || !prefillSymbol || !portfolio) return;
-    const target = prefillSymbol.toUpperCase();
+    const symbols = parseTickerInput(prefillSymbol);
+    if (symbols.length === 0) {
+      setPrefillApplied(true);
+      return;
+    }
+    const limited = symbols.slice(0, SQUAD_TOTAL_COUNT);
 
-    /* Block prefill if the symbol is already in the squad — one ticker
-       per squad rule. Surfaces a notice so the user knows nothing was
-       added. */
-    const alreadyHere = portfolio.players.some((p) => {
+    /* Build the set of symbols already in the squad (effective —
+       accounts for prior pending edits, though on first run pending
+       is empty). */
+    const occupied = new Set<string>();
+    for (const p of portfolio.players) {
       const eff = effectiveAsset(p.positionId, p.asset);
-      return eff?.symbol?.toUpperCase() === target;
-    });
-    if (alreadyHere) {
-      setPrefillNotice(`${target} is already in this squad. Each ticker can only be signed once.`);
-      setPrefillApplied(true);
-      return;
+      if (eff?.symbol) occupied.add(eff.symbol.toUpperCase());
     }
 
-    const firstEmptyStarter = portfolio.players.find(
-      (p) => !p.isBench && !p.asset && !pending.has(p.positionId),
-    );
-    if (!firstEmptyStarter) {
-      /* No empty starter — fall back to first empty bench slot, then
-         to bailing out with a banner. */
-      const firstEmptyBench = portfolio.players.find(
-        (p) => p.isBench && !p.asset && !pending.has(p.positionId),
-      );
-      if (!firstEmptyBench) {
-        setPrefillNotice(`Couldn't auto-place ${target} — squad is already full. Use "Change" on any slot to swap a player.`);
-        setPrefillApplied(true);
-        return;
-      }
+    const duplicates: string[] = [];
+    const newSymbols: string[] = [];
+    for (const sym of limited) {
+      if (occupied.has(sym)) duplicates.push(sym);
+      else newSymbols.push(sym);
     }
 
-    const slot = firstEmptyStarter
-      ?? portfolio.players.find((p) => p.isBench && !p.asset && !pending.has(p.positionId));
-    if (!slot) {
-      setPrefillApplied(true);
-      return;
-    }
-
-    /* Resolve the Asset object — try the mock catalogue first since
-       it's instant; fall back to Yahoo lookup for tickers we don't
-       carry yet. */
     let cancelled = false;
-    const mock = MOCK_ASSETS.find((a) => a.symbol.toUpperCase() === target);
-    const apply = (asset: Asset) => {
-      if (cancelled) return;
-      setPending((prev) => {
-        const next = new Map(prev);
-        next.set(slot.positionId, asset);
-        return next;
-      });
-      setPrefillNotice(`Added ${asset.symbol} to ${slot.isBench ? 'the bench' : 'an empty starter slot'} — tap Save when you're done, or move it with "Change".`);
-      setPrefillApplied(true);
-    };
-
-    if (mock) {
-      apply(mock);
-      return;
-    }
-
     (async () => {
-      try {
-        const res = await fetch(`/api/yahoo-finance?symbol=${encodeURIComponent(target)}`);
-        const data = await res.json();
-        if (data.success && data.asset) {
-          apply(data.asset as Asset);
-        } else {
-          setPrefillNotice(`Couldn't find a ticker for ${target}.`);
-          setPrefillApplied(true);
+      const { resolved, unknown } = await resolveSymbols(newSymbols);
+      if (cancelled) return;
+
+      /* Walk starter slots first, then bench, dropping a pending
+         change for each resolved asset until either the queue or the
+         empty-slot list is exhausted. */
+      const ordered = [
+        ...portfolio.players.filter((p) => !p.isBench),
+        ...portfolio.players.filter((p) => p.isBench),
+      ];
+      const nextPending = new Map(pending);
+      const placed: string[] = [];
+      let queue = [...resolved];
+      for (const slot of ordered) {
+        if (queue.length === 0) break;
+        const eff = effectiveAsset(slot.positionId, slot.asset);
+        if (eff || nextPending.has(slot.positionId)) continue;
+        const pick = queue.shift();
+        if (pick) {
+          nextPending.set(slot.positionId, pick);
+          placed.push(pick.symbol);
         }
-      } catch {
-        setPrefillNotice(`Couldn't look up ${target} right now.`);
-        setPrefillApplied(true);
       }
+      /* If we ran out of slots before exhausting the queue, the
+         leftovers are reported in the notice. */
+      const overflow = queue.map((a) => a.symbol);
+      setPending(nextPending);
+
+      const parts: string[] = [];
+      if (placed.length > 0) {
+        parts.push(
+          `Added ${placed.length} ticker${placed.length === 1 ? '' : 's'} (${placed.slice(0, 8).join(', ')}${placed.length > 8 ? `, +${placed.length - 8} more` : ''}) — tap Save when you're done.`,
+        );
+      }
+      if (duplicates.length > 0) {
+        parts.push(`${duplicates.length} already in squad: ${duplicates.join(', ')}.`);
+      }
+      if (unknown.length > 0) {
+        parts.push(`Couldn't find: ${unknown.join(', ')}.`);
+      }
+      if (overflow.length > 0) {
+        parts.push(`No empty slots for: ${overflow.join(', ')}.`);
+      }
+      if (parts.length === 0) {
+        parts.push('Nothing to add.');
+      }
+      setPrefillNotice(parts.join(' '));
+      setPrefillApplied(true);
     })();
     return () => {
       cancelled = true;
@@ -355,6 +438,108 @@ export default function SignSquadPage() {
     }
   };
 
+  /* "Paste tickers" preview — parses the textarea, resolves symbols,
+     and stages a preview the user can confirm. Doesn't touch pending
+     until they hit Confirm. */
+  const buildPastePreview = async () => {
+    setPasteError(null);
+    setPasteBusy(true);
+    try {
+      const symbols = parseTickerInput(pasteText);
+      if (symbols.length === 0) {
+        setPasteError('No tickers found — paste comma-separated, one-per-line, or a JSON array.');
+        setPastePreview(null);
+        return;
+      }
+      const limited = symbols.slice(0, SQUAD_TOTAL_COUNT);
+
+      /* Dedupe against the current squad (including pending edits)
+         and within the paste itself. parseTickerInput already deduped
+         within the paste; this catches against-the-squad collisions. */
+      const occupied = new Set<string>();
+      for (const p of portfolio.players) {
+        const eff = effectiveAsset(p.positionId, p.asset);
+        if (eff?.symbol) occupied.add(eff.symbol.toUpperCase());
+      }
+      const duplicates: string[] = [];
+      const fresh: string[] = [];
+      for (const sym of limited) {
+        if (occupied.has(sym)) duplicates.push(sym);
+        else fresh.push(sym);
+      }
+
+      const { resolved, unknown } = await resolveSymbols(fresh);
+
+      /* How many can we actually place? Count empty (effective) slots. */
+      const emptySlots = portfolio.players.reduce((n, p) => {
+        const eff = effectiveAsset(p.positionId, p.asset);
+        return eff ? n : n + 1;
+      }, 0);
+      const placeable = resolved.slice(0, emptySlots);
+      const overflowSymbols = resolved.slice(emptySlots).map((a) => a.symbol);
+
+      setPastePreview({
+        valid: placeable,
+        unknown,
+        duplicates,
+        overflowSymbols,
+      });
+    } catch (e) {
+      console.error('Paste preview failed:', e);
+      setPasteError('Could not parse input. Try comma-separated tickers or a JSON array.');
+      setPastePreview(null);
+    } finally {
+      setPasteBusy(false);
+    }
+  };
+
+  /* Apply the previewed list: starters first, then bench, respecting
+     the one-ticker-per-squad rule (already filtered in preview). */
+  const applyPastePreview = () => {
+    if (!pastePreview) return;
+    const nextPending = new Map(pending);
+    const ordered = [
+      ...portfolio.players.filter((p) => !p.isBench),
+      ...portfolio.players.filter((p) => p.isBench),
+    ];
+    let queue = [...pastePreview.valid];
+    let signedStarters = 0;
+    let signedBench = 0;
+    for (const slot of ordered) {
+      if (queue.length === 0) break;
+      const eff = effectiveAsset(slot.positionId, slot.asset);
+      if (eff || nextPending.has(slot.positionId)) continue;
+      const pick = queue.shift();
+      if (pick) {
+        nextPending.set(slot.positionId, pick);
+        if (slot.isBench) signedBench += 1;
+        else signedStarters += 1;
+      }
+    }
+    setPending(nextPending);
+    const total = signedStarters + signedBench;
+    const parts: string[] = [];
+    if (total > 0) {
+      parts.push(
+        `${total} ticker${total === 1 ? '' : 's'} staged — tap Save when you're ready.`,
+      );
+    }
+    if (pastePreview.duplicates.length > 0) {
+      parts.push(`Skipped duplicates: ${pastePreview.duplicates.join(', ')}.`);
+    }
+    if (pastePreview.unknown.length > 0) {
+      parts.push(`Couldn't find: ${pastePreview.unknown.join(', ')}.`);
+    }
+    if (pastePreview.overflowSymbols.length > 0) {
+      parts.push(`No room for: ${pastePreview.overflowSymbols.join(', ')}.`);
+    }
+    if (parts.length > 0) setPrefillNotice(parts.join(' '));
+    setPasteOpen(false);
+    setPasteText('');
+    setPastePreview(null);
+    setPasteError(null);
+  };
+
   /* Single-shot save: build the full 22-slot players array from the
      starters + (existing-or-phantom) bench, apply each effective
      asset, and PUT in one request. Phantom bench rows that weren't on
@@ -458,6 +643,20 @@ export default function SignSquadPage() {
               title="Auto-fill empty starter slots with a defensible blue-chip basket"
             >
               Coach&apos;s pick
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPasteText('');
+                setPastePreview(null);
+                setPasteError(null);
+                setPasteOpen(true);
+              }}
+              className="stadium-btn stadium-btn-ghost"
+              style={{ padding: '8px 12px', fontSize: 11 }}
+              title="Paste a comma list, one-per-line, or JSON array of up to 22 tickers"
+            >
+              Paste tickers
             </button>
             <button
               type="button"
@@ -602,6 +801,145 @@ export default function SignSquadPage() {
         position={editingSlot?.position || null}
         currentAsset={editingSlot?.currentAsset || null}
       />
+
+      {/* CSV / JSON paste modal — accepts a freeform list, previews
+          valid/unknown/duplicate counts, then confirms into pending. */}
+      <Modal
+        isOpen={pasteOpen}
+        onClose={() => {
+          setPasteOpen(false);
+          setPasteText('');
+          setPastePreview(null);
+          setPasteError(null);
+        }}
+        title="Paste tickers"
+        subtitle="UP TO 22 SYMBOLS · COMMA · NEWLINE · JSON ARRAY"
+        size="md"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div className="mono" style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.55 }}>
+            Paste tickers in any format — comma list, one-per-line, or a JSON array.
+            Unknown symbols are surfaced; duplicates are skipped. Starters fill first.
+          </div>
+          <textarea
+            value={pasteText}
+            onChange={(e) => {
+              setPasteText(e.target.value);
+              /* Invalidate the preview when the input changes so the
+                 user has to re-parse before confirming. */
+              if (pastePreview) setPastePreview(null);
+              if (pasteError) setPasteError(null);
+            }}
+            placeholder={'AAPL, MSFT, NVDA\nor\n["AAPL","MSFT","NVDA"]'}
+            rows={8}
+            style={{
+              width: '100%',
+              background: 'var(--surface-2)',
+              border: '1px solid var(--line)',
+              borderRadius: 6,
+              padding: '10px 12px',
+              color: 'var(--text)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+              resize: 'vertical',
+              minHeight: 120,
+            }}
+          />
+          {pasteError && (
+            <div
+              className="stadium-card"
+              style={{
+                padding: '10px 12px',
+                background: 'oklch(0.65 0.22 25 / 0.08)',
+                borderColor: 'oklch(0.65 0.22 25 / 0.3)',
+              }}
+            >
+              <p className="mono" style={{ margin: 0, fontSize: 11, color: 'var(--ref-red)' }}>
+                {pasteError}
+              </p>
+            </div>
+          )}
+          {pastePreview && (
+            <div
+              className="stadium-card"
+              style={{
+                padding: 12,
+                background: 'var(--surface-2)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+              }}
+            >
+              <div className="kicker">PREVIEW</div>
+              <div className="mono" style={{ fontSize: 12, color: 'var(--text)' }}>
+                {pastePreview.valid.length} valid
+                {pastePreview.unknown.length > 0 ? `, ${pastePreview.unknown.length} unknown` : ''}
+                {pastePreview.duplicates.length > 0
+                  ? `, ${pastePreview.duplicates.length} duplicate${pastePreview.duplicates.length === 1 ? '' : 's'}`
+                  : ''}
+                {pastePreview.overflowSymbols.length > 0
+                  ? `, ${pastePreview.overflowSymbols.length} won't fit`
+                  : ''}
+              </div>
+              {pastePreview.valid.length > 0 && (
+                <div className="mono" style={{ fontSize: 10, color: 'var(--text-mute)', lineHeight: 1.55 }}>
+                  Will sign: {pastePreview.valid.map((a) => a.symbol).join(', ')}
+                </div>
+              )}
+              {pastePreview.unknown.length > 0 && (
+                <div className="mono" style={{ fontSize: 10, color: 'var(--whistle)', lineHeight: 1.55 }}>
+                  Couldn&apos;t find: {pastePreview.unknown.join(', ')}
+                </div>
+              )}
+              {pastePreview.duplicates.length > 0 && (
+                <div className="mono" style={{ fontSize: 10, color: 'var(--text-mute)', lineHeight: 1.55 }}>
+                  Already in squad: {pastePreview.duplicates.join(', ')}
+                </div>
+              )}
+              {pastePreview.overflowSymbols.length > 0 && (
+                <div className="mono" style={{ fontSize: 10, color: 'var(--text-mute)', lineHeight: 1.55 }}>
+                  No room for: {pastePreview.overflowSymbols.join(', ')}
+                </div>
+              )}
+            </div>
+          )}
+          <div className="flex" style={{ gap: 10 }}>
+            <button
+              type="button"
+              onClick={() => {
+                setPasteOpen(false);
+                setPasteText('');
+                setPastePreview(null);
+                setPasteError(null);
+              }}
+              className="stadium-btn stadium-btn-ghost"
+              style={{ flex: 1, justifyContent: 'center', padding: '10px 16px' }}
+            >
+              Cancel
+            </button>
+            {pastePreview && pastePreview.valid.length > 0 ? (
+              <button
+                type="button"
+                onClick={applyPastePreview}
+                className="stadium-btn stadium-btn-primary"
+                style={{ flex: 1, justifyContent: 'center', padding: '10px 16px' }}
+              >
+                Stage {pastePreview.valid.length} ticker{pastePreview.valid.length === 1 ? '' : 's'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={buildPastePreview}
+                disabled={pasteBusy || !pasteText.trim()}
+                className="stadium-btn stadium-btn-primary"
+                style={{ flex: 1, justifyContent: 'center', padding: '10px 16px' }}
+              >
+                {pasteBusy ? 'Parsing…' : 'Parse & preview'}
+              </button>
+            )}
+          </div>
+        </div>
+      </Modal>
     </AppLayout>
   );
 }
