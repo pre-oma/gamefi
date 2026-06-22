@@ -103,9 +103,15 @@ const PlayerSlot: React.FC<{
 
   return (
     <motion.button
-      initial={{ scale: 0, opacity: 0 }}
+      initial={{ scale: 0.92, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
-      transition={{ type: 'spring', duration: 0.5, delay: Math.random() * 0.3 }}
+      /* Snappier entrance: drop the 0-0.3s random delay and the
+         heavy spring. The randomness made the squad feel sluggish on
+         every reload — players appeared to "trickle in" over ~0.8s
+         even though all the data was already in memory. A 180ms ease
+         is fast enough that the chips read as instant but still
+         gives a tiny pop so the page doesn't snap into place jaggedly. */
+      transition={{ duration: 0.18, ease: 'easeOut' }}
       onClick={onClick}
       disabled={!isEditable}
       className={cn('absolute group', isEditable && 'cursor-pointer')}
