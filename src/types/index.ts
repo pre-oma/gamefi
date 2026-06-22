@@ -3,7 +3,7 @@ export const DEFAULT_MAX_TEAMS = 3;
 export const TEAM_SLOT_UNLOCK_COST = 1000; // XP cost to unlock additional team slot
 
 // Challenge Types
-export type ChallengeType = 'sp500' | 'user';
+export type ChallengeType = 'sp500' | 'user' | 'etf';
 export type ChallengeStatus = 'pending' | 'active' | 'completed' | 'declined' | 'cancelled';
 export type ChallengeTimeframe = '1W' | '2W' | '1M' | '3M';
 
@@ -15,6 +15,9 @@ export interface Challenge {
   challengerPortfolioId: string;
   opponentId: string | null;
   opponentPortfolioId: string | null;
+  /* For type='etf' fixtures: the Yahoo ticker of the benchmark
+     (e.g. 'QQQ', 'ARKK', 'VTI'). Null for sp500/user types. */
+  opponentSymbol?: string | null;
   timeframe: ChallengeTimeframe;
   startDate: string | null;
   endDate: string | null;
@@ -37,8 +40,29 @@ export interface Challenge {
   opponentPortfolioName?: string;
 }
 
-export const CHALLENGE_XP = { VS_SP500: 100, VS_USER: 200 };
+export const CHALLENGE_XP = { VS_SP500: 100, VS_USER: 200, VS_ETF: 150 };
 export const MAX_ACTIVE_CHALLENGES = 3;
+
+/* XP multiplier by challenge timeframe — longer commitments pay more.
+   Applied at settle time: awarded = base * CHALLENGE_TIMEFRAME_XP_MULT[timeframe]. */
+export const CHALLENGE_TIMEFRAME_XP_MULT: Record<ChallengeTimeframe, number> = {
+  '1W': 1.0,
+  '2W': 1.5,
+  '1M': 2.5,
+  '3M': 5.0,
+};
+
+// Training / lesson completion
+export const LESSON_COMPLETION_XP = 100;
+
+export interface LessonCompletion {
+  id: string;
+  userId: string;
+  lessonId: string;
+  moduleId: string;
+  completedAt: string;
+  xpAwarded: number;
+}
 
 export const CHALLENGE_TIMEFRAMES: { value: ChallengeTimeframe; label: string; days: number }[] = [
   { value: '1W', label: '1 Week', days: 7 },
@@ -218,6 +242,12 @@ export interface PortfolioPlayer {
   positionId: string;
   asset: Asset | null;
   allocation: number; // Should be approximately 9.09% (100/11) per player
+  /* True when the player sits on the bench (11 reserves alongside the
+     11 starters). Bench players have allocation 0 and don't contribute
+     to portfolio returns until subbed onto the pitch in a weekend
+     swap. Undefined/false = starter, for backwards-compat with old
+     11-player rows. */
+  isBench?: boolean;
 }
 
 // Portfolio Types
@@ -235,6 +265,14 @@ export interface Portfolio {
   clonedFrom: string | null;
   cloneCount: number;
   tags: string[];
+  /* Privacy gate flags set by the API when a non-owner viewer fetches
+     this portfolio. isSnapshot=true means players/formation reflect
+     the last Fri 21:00 UTC snapshot rather than live; snapshotGameweek
+     identifies which week; noSnapshotAvailable=true on first-week view
+     when no snapshot has been taken yet. */
+  isSnapshot?: boolean;
+  snapshotGameweek?: number;
+  noSnapshotAvailable?: boolean;
 }
 
 export interface PortfolioPerformance {
@@ -778,12 +816,100 @@ export interface UserOnboarding {
   completedAt: string | null;
 }
 
+/* Updated post-stadium rewrite. Copy now matches the actual app
+   vocabulary (Squads, Matchday, Fixtures, Training) and leads with
+   "paper money" reassurance because Sarah-from-the-tester-personas
+   was visibly anxious that real money was at stake. Targets are
+   intentionally empty for now — the spotlight feature wasn't doing
+   anything useful because no element in the app had a matching
+   data-tour attribute. Future: wire data-tour to Sidebar nav items. */
 export const ONBOARDING_STEPS: OnboardingStep[] = [
-  { id: 'welcome', title: 'Welcome to Gamefi Invest!', description: 'Learn to invest by building your dream team of stocks.', target: '', position: 'bottom' },
-  { id: 'dashboard', title: 'Your Dashboard', description: 'Track your XP, level, and portfolio performance here.', target: '[data-tour="dashboard"]', position: 'bottom' },
-  { id: 'create_portfolio', title: 'Create Your First Team', description: 'Click here to build your first investment portfolio.', target: '[data-tour="create-portfolio"]', position: 'right' },
-  { id: 'formation', title: 'Choose a Formation', description: 'Different formations represent different investment strategies.', target: '[data-tour="formation"]', position: 'bottom' },
-  { id: 'add_stocks', title: 'Add Stocks to Your Team', description: 'Click on positions to add stocks. Match risk levels for best results!', target: '[data-tour="formation-field"]', position: 'left' },
-  { id: 'challenges', title: 'Challenge Others', description: 'Compete against the S&P 500 or other users to earn XP!', target: '[data-tour="challenges"]', position: 'right' },
-  { id: 'learn', title: 'Keep Learning', description: 'Visit the Learn section to improve your investing skills.', target: '[data-tour="learn"]', position: 'right' },
+  { id: 'welcome',          title: 'Welcome to Gamefi Invest',     description: 'This is a free practice league. You build squads of real stocks, the prices are real, but the money is fake — no card, no risk.', target: '', position: 'bottom' },
+  { id: 'matchday',         title: 'Your Matchday HQ',             description: 'The Matchday tab tracks your XP, level, and squad performance. Sidebar on the left, season pill above your level rail.', target: '', position: 'bottom' },
+  { id: 'create_squad',     title: 'Build your first Squad',       description: 'Squads are portfolios of 22 stocks: 11 starters that count for returns, 11 reserves on the bench. Pick a formation, sign 22 players.', target: '', position: 'right' },
+  { id: 'sign_players',     title: 'Sign players in one go',       description: 'Use Sign Squad to fill all 22 slots in one screen. Or use the Market tab to find a specific ticker — click Sign and choose which squad it joins.', target: '', position: 'right' },
+  { id: 'fixtures',         title: 'Beat the index',               description: 'Fixtures are 1-week to 3-month challenges. Beat the S&P 500, any ETF, or another manager. Longer timeframes pay more XP.', target: '', position: 'right' },
+  { id: 'training',         title: 'Training Ground',              description: 'Pass drills in the Training tab to earn XP and learn how the market actually works. Asset types, risk, valuation — bite-sized lessons.', target: '', position: 'right' },
+  { id: 'kickoff',          title: 'Kick off',                     description: 'You’ll get a daily login bonus, weekend sub windows, and quarterly transfer windows. Take it slow — the league runs for 52 weeks.', target: '', position: 'bottom' },
 ];
+
+// ============================================================
+// SEASON / SQUAD / TRANSFER / SNAPSHOT TYPES
+// Shared contract for the season-features expansion. Server APIs
+// and client store read these constants so caps/costs stay in sync.
+// ============================================================
+
+export const SQUAD_STARTER_COUNT = 11;
+export const SQUAD_BENCH_COUNT = 11;
+export const SQUAD_TOTAL_COUNT = SQUAD_STARTER_COUNT + SQUAD_BENCH_COUNT;
+
+// 52-week global season, with 4 quarters of 13 weeks each
+export const SEASON_TOTAL_WEEKS = 52;
+export const WEEKS_PER_QUARTER = 13;
+
+// Quarterly transfer windows — open at gameweeks 1, 14, 27, 40 and
+// stay open for 2 gameweeks each. New signings only allowed inside.
+export const QUARTER_OPEN_GAMEWEEKS = [1, 14, 27, 40] as const;
+export const QUARTER_WINDOW_LENGTH_WEEKS = 2;
+
+// Weekend swap window — Fri 16:00 ET (= Fri 21:00 UTC, ignoring DST
+// fuzz) through Mon 05:00 UTC ≈ Sun 23:59 ET. Subs only allowed
+// inside; outside, the squad is locked.
+export const WEEKEND_OPEN_DAY_UTC = 5;       // Friday
+export const WEEKEND_OPEN_HOUR_UTC = 21;
+export const WEEKEND_CLOSE_DAY_UTC = 1;      // Monday
+export const WEEKEND_CLOSE_HOUR_UTC = 5;
+
+// Caps and costs
+export const WEEKEND_SUB_MAX_PER_WEEKEND = 4;
+export const WEEKEND_SUB_COST_XP = 25;
+export const QUARTERLY_TRANSFER_MAX_PER_QUARTER = 5;
+export const QUARTERLY_TRANSFER_COST_XP = 100;
+
+export type AllocationStrategy = 'inherit' | 'split';
+
+export interface SeasonState {
+  seasonNumber: number;
+  startDate: string;          // YYYY-MM-DD (a Monday)
+  totalWeeks: number;
+  /* Computed: current gameweek 1..52, current quarter 1..4. */
+  currentGameweek: number;
+  currentQuarter: number;
+  isTransferWindowOpen: boolean;
+  isWeekendWindowOpen: boolean;
+}
+
+export interface WeekendSwap {
+  id: string;
+  userId: string;
+  portfolioId: string;
+  gameweek: number;
+  seasonNumber: number;
+  starterSymbol: string;     // moved to bench
+  benchSymbol: string;       // came on
+  xpCost: number;
+  createdAt: string;
+}
+
+export interface TransferLogEntry {
+  id: string;
+  userId: string;
+  portfolioId: string;
+  quarter: number;
+  seasonNumber: number;
+  outSymbol: string;
+  inSymbol: string;
+  allocationStrategy: AllocationStrategy;
+  xpCost: number;
+  createdAt: string;
+}
+
+export interface PortfolioSnapshot {
+  id: string;
+  portfolioId: string;
+  snapshotDate: string;
+  gameweek: number;
+  seasonNumber: number;
+  players: PortfolioPlayer[];
+  formation: Formation;
+}

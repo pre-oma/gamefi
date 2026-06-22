@@ -18,6 +18,9 @@ import {
   TEAM_SLOT_UNLOCK_COST,
   MAX_ACTIVE_CHALLENGES,
   CHALLENGE_XP,
+  SeasonState,
+  AllocationStrategy,
+  SQUAD_BENCH_COUNT,
 } from '@/types';
 import { AuthResponse } from '@/types';
 
@@ -57,6 +60,13 @@ interface AppState {
   completedChallenges: Challenge[];
   challengesLoading: boolean;
 
+  // Training / lesson completion state — set of completed lesson IDs
+  lessonCompletions: Set<string>;
+  lessonCompletionsLoaded: boolean;
+
+  // Season clock — populated by loadSeasonState() (called from loadData)
+  seasonState: SeasonState | null;
+
   // Actions - Auth
   login: (identifier: string, password: string) => Promise<AuthResponse>;
   register: (username: string, email: string, password: string) => Promise<AuthResponse>;
@@ -71,9 +81,9 @@ interface AppState {
   updatePlayerWeights: (portfolioId: string, weights: { positionId: string; allocation: number }[]) => Promise<void>;
   likePortfolio: (portfolioId: string) => Promise<void>;
   clonePortfolio: (portfolioId: string) => Promise<Portfolio | null>;
-  canCreateTeam: () => boolean;
-  getTeamSlotInfo: () => { current: number; max: number; canUnlock: boolean; unlockCost: number };
-  unlockTeamSlot: () => Promise<boolean>;
+  canCreateSquad: () => boolean;
+  getSquadSlotInfo: () => { current: number; max: number; canUnlock: boolean; unlockCost: number };
+  unlockSquadSlot: () => Promise<boolean>;
 
   // Actions - Social
   followUser: (targetUserId: string) => void;
@@ -90,13 +100,73 @@ interface AppState {
     type: ChallengeType,
     timeframe: ChallengeTimeframe,
     opponentId?: string,
-    opponentPortfolioId?: string
+    opponentPortfolioId?: string,
+    /* ETF challenges only — Yahoo ticker (e.g. 'QQQ'). Validated
+       client-side via /api/yahoo-finance before this call and again
+       server-side in /api/challenges. */
+    opponentSymbol?: string,
   ) => Promise<{ success: boolean; error?: string; challenge?: Challenge }>;
   acceptChallenge: (challengeId: string, portfolioId: string) => Promise<{ success: boolean; error?: string }>;
   declineChallenge: (challengeId: string) => Promise<{ success: boolean; error?: string }>;
   cancelChallenge: (challengeId: string) => Promise<{ success: boolean; error?: string }>;
   getActiveChallengesCount: () => number;
   canCreateChallenge: (type: ChallengeType) => { canCreate: boolean; reason?: string };
+
+  // Actions - Season / Squad
+  loadSeasonState: () => Promise<void>;
+  weekendSwap: (
+    portfolioId: string,
+    starterSymbol: string,
+    benchSymbol: string,
+    allocationStrategy?: AllocationStrategy,
+  ) => Promise<{ success: boolean; error?: string; swapsRemaining?: number }>;
+  weekendSwapBatch: (
+    portfolioId: string,
+    swaps: Array<{
+      starterSymbol: string;
+      benchSymbol: string;
+      allocationStrategy?: AllocationStrategy;
+    }>,
+  ) => Promise<{
+    success: boolean;
+    error?: string;
+    appliedCount?: number;
+    swapsRemaining?: number;
+    /* Per-swap status — index matches the input array. Successful
+       entries have success:true; failures carry the server-side
+       error string (cap_exceeded, not-found, xp). */
+    results?: Array<{
+      index: number;
+      starterSymbol: string;
+      benchSymbol: string;
+      success: boolean;
+      error?: string;
+    }>;
+  }>;
+  quarterlyTransfer: (
+    portfolioId: string,
+    outSymbol: string,
+    inSymbol: string,
+    allocationStrategy: AllocationStrategy,
+    newAsset: Asset,
+  ) => Promise<{ success: boolean; error?: string; transfersRemaining?: number }>;
+
+  // Actions - Live challenge returns (mid-match percentage refresh)
+  loadLiveReturns: () => Promise<void>;
+
+  // Actions - Training / lesson completion
+  loadLessonCompletions: () => Promise<void>;
+  markLessonComplete: (
+    lessonId: string,
+    moduleId: string,
+  ) => Promise<{
+    success: boolean;
+    awarded: boolean;
+    xpAwarded?: number;
+    newLevel?: number;
+    leveledUp?: boolean;
+    error?: string;
+  }>;
 
   // Actions - Data loading
   loadData: () => Promise<void>;
@@ -112,6 +182,11 @@ export const useStore = create<AppState>((set, get) => ({
   publicPortfolios: [],
   activities: [],
   notifications: [],
+  lessonCompletions: new Set<string>(),
+  lessonCompletionsLoaded: false,
+
+  // Season state
+  seasonState: null,
 
   // Challenge initial state
   challenges: [],
@@ -183,11 +258,19 @@ export const useStore = create<AppState>((set, get) => ({
 
   logout: () => {
     setStoredSession(null);
+    /* Fire-and-forget the server-side logout so the httpOnly session
+       cookie is cleared. Don't block UI on the network response —
+       the local state reset is what the user sees. */
+    fetch('/api/auth/logout', { method: 'POST' }).catch(() => {
+      /* network failure is fine; cookie will expire on its own TTL */
+    });
     set({
       currentUser: null,
       isAuthenticated: false,
       portfolios: [],
       notifications: [],
+      lessonCompletions: new Set<string>(),
+      lessonCompletionsLoaded: false,
     });
   },
 
@@ -196,14 +279,23 @@ export const useStore = create<AppState>((set, get) => ({
     if (!currentUser) return;
 
     try {
+      /* Server-only fields stripped client-side too — defense in depth
+         (server already rejects them with 400 since the auth band-aid). */
+      const { xp: _xp, level: _level, maxTeams: _mt, totalRewards: _tr, ...safe } = updates as Partial<User> & Record<string, unknown>;
+      void _xp; void _level; void _mt; void _tr;
+
       const response = await fetch('/api/users', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: currentUser.id, ...updates }),
+        body: JSON.stringify({
+          id: currentUser.id,
+          requesterId: currentUser.id,
+          ...safe,
+        }),
       });
 
       if (response.ok) {
-        const updatedUser = { ...currentUser, ...updates };
+        const updatedUser = { ...currentUser, ...safe } as User;
         set({ currentUser: updatedUser });
       }
     } catch (error) {
@@ -212,14 +304,14 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   // Portfolio actions
-  canCreateTeam: () => {
+  canCreateSquad: () => {
     const { currentUser, portfolios } = get();
     if (!currentUser) return false;
     const maxTeams = currentUser.maxTeams ?? DEFAULT_MAX_TEAMS;
     return portfolios.length < maxTeams;
   },
 
-  getTeamSlotInfo: () => {
+  getSquadSlotInfo: () => {
     const { currentUser, portfolios } = get();
     if (!currentUser) {
       return { current: 0, max: DEFAULT_MAX_TEAMS, canUnlock: false, unlockCost: TEAM_SLOT_UNLOCK_COST };
@@ -234,7 +326,7 @@ export const useStore = create<AppState>((set, get) => ({
     };
   },
 
-  unlockTeamSlot: async () => {
+  unlockSquadSlot: async () => {
     const { currentUser } = get();
     if (!currentUser) return false;
     if (currentUser.xp < TEAM_SLOT_UNLOCK_COST) return false;
@@ -243,7 +335,7 @@ export const useStore = create<AppState>((set, get) => ({
       const response = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: currentUser.id, action: 'unlockTeamSlot' }),
+        body: JSON.stringify({ userId: currentUser.id, action: 'unlockSquadSlot' }),
       });
 
       const result = await response.json();
@@ -265,19 +357,33 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   createPortfolio: async (name: string, description: string, formation: Formation) => {
-    const { currentUser, canCreateTeam } = get();
+    const { currentUser, canCreateSquad } = get();
     if (!currentUser) throw new Error('Must be logged in');
 
-    if (!canCreateTeam()) {
-      throw new Error('Team limit reached. Unlock more slots with XP.');
+    if (!canCreateSquad()) {
+      throw new Error('Squad limit reached. Unlock more slots with XP.');
     }
 
     const positions = FORMATIONS[formation];
-    const players: PortfolioPlayer[] = positions.map((pos) => ({
+    const starters: PortfolioPlayer[] = positions.map((pos) => ({
       positionId: pos.id,
       asset: null,
       allocation: 100 / 11,
     }));
+    /* Seed 11 bench slots with synthetic position ids. Bench players
+       sit at allocation 0 until they're subbed into a starter slot via
+       a weekend swap. Initial bench fill (during /sign) is free; later
+       swaps cost XP per the season rules. */
+    const bench: PortfolioPlayer[] = Array.from(
+      { length: SQUAD_BENCH_COUNT },
+      (_, i) => ({
+        positionId: `bench-${i + 1}`,
+        asset: null,
+        allocation: 0,
+        isBench: true,
+      }),
+    );
+    const players: PortfolioPlayer[] = [...starters, ...bench];
 
     const response = await fetch('/api/portfolios', {
       method: 'POST',
@@ -301,19 +407,15 @@ export const useStore = create<AppState>((set, get) => ({
 
     const portfolio = result.portfolio;
 
-    // Update user XP locally
+    /* Server already granted the +50 XP and returned the new totals.
+       Merge them directly — no more client-side PUT /api/users which
+       would now be rejected by the server-only XP guard. */
     const updatedUser = {
       ...currentUser,
       portfolios: [...currentUser.portfolios, portfolio.id],
-      xp: currentUser.xp + 50,
+      xp: typeof result.newXp === 'number' ? result.newXp : currentUser.xp,
+      level: typeof result.newLevel === 'number' ? result.newLevel : currentUser.level,
     };
-
-    // Update user in database
-    await fetch('/api/users', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: currentUser.id, xp: updatedUser.xp }),
-    });
 
     set({
       currentUser: updatedUser,
@@ -324,10 +426,13 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   updatePortfolio: async (id: string, updates: Partial<Portfolio>) => {
+    const { currentUser } = get();
     const response = await fetch('/api/portfolios', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, ...updates }),
+      /* userId required by the server-side ownership check on
+         /api/portfolios PUT (added in the auth band-aid sprint). */
+      body: JSON.stringify({ id, userId: currentUser?.id, ...updates }),
     });
 
     const result = await response.json();
@@ -368,9 +473,27 @@ export const useStore = create<AppState>((set, get) => ({
     const portfolio = get().portfolios.find((p) => p.id === portfolioId);
     if (!portfolio) return;
 
-    const updatedPlayers = portfolio.players.map((player) =>
-      player.positionId === positionId ? { ...player, asset } : player
-    );
+    const hasEntry = portfolio.players.some((p) => p.positionId === positionId);
+    let updatedPlayers: PortfolioPlayer[];
+    if (hasEntry) {
+      updatedPlayers = portfolio.players.map((player) =>
+        player.positionId === positionId ? { ...player, asset } : player,
+      );
+    } else {
+      /* Inserting a new slot — happens when a legacy 11-player portfolio
+         is being topped up with bench entries (positionId 'bench-N')
+         via the bulk-sign page. Bench entries always start at 0%. */
+      const isBench = positionId.startsWith('bench-');
+      updatedPlayers = [
+        ...portfolio.players,
+        {
+          positionId,
+          asset,
+          allocation: isBench ? 0 : 100 / 11,
+          isBench: isBench || undefined,
+        },
+      ];
+    }
 
     await get().updatePortfolio(portfolioId, { players: updatedPlayers });
   },
@@ -442,6 +565,28 @@ export const useStore = create<AppState>((set, get) => ({
                     get().publicPortfolios.find((p) => p.id === portfolioId);
     if (!original) return null;
 
+    /* F7 privacy gate: when cloning someone else's portfolio, fetch the
+       snapshot via viewerId so the clone gets last weekend's lineup,
+       not the owner's in-progress squad. Cloning own portfolio uses
+       live data directly. */
+    let cloneSourcePlayers = original.players;
+    let cloneSourceFormation = original.formation;
+    if (original.userId !== currentUser.id) {
+      try {
+        const snapshotRes = await fetch(
+          `/api/portfolios?id=${portfolioId}&viewerId=${currentUser.id}`
+        );
+        const snapshotData = await snapshotRes.json();
+        if (snapshotData.success && snapshotData.portfolios?.length > 0) {
+          const snap = snapshotData.portfolios[0];
+          cloneSourcePlayers = snap.players;
+          cloneSourceFormation = snap.formation;
+        }
+      } catch (error) {
+        console.error('Failed to fetch snapshot for clone, falling back to cached data:', error);
+      }
+    }
+
     const response = await fetch('/api/portfolios', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -449,10 +594,13 @@ export const useStore = create<AppState>((set, get) => ({
         userId: currentUser.id,
         name: `${original.name} (Clone)`,
         description: original.description,
-        formation: original.formation,
-        players: original.players,
+        formation: cloneSourceFormation,
+        players: cloneSourcePlayers,
         isPublic: true,
         tags: original.tags,
+        /* Signal to the server this is a clone (so it grants +25 XP
+           instead of +50) and to record cloned_from on the row. */
+        clonedFrom: portfolioId,
       }),
     });
 
@@ -480,17 +628,14 @@ export const useStore = create<AppState>((set, get) => ({
       ),
     });
 
+    /* Server granted the +25 XP and returned the new totals on the
+       POST response. No client-side PUT /api/users needed. */
     const updatedUser = {
       ...currentUser,
       portfolios: [...currentUser.portfolios, cloned.id],
-      xp: currentUser.xp + 25,
+      xp: typeof result.newXp === 'number' ? result.newXp : currentUser.xp,
+      level: typeof result.newLevel === 'number' ? result.newLevel : currentUser.level,
     };
-
-    await fetch('/api/users', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: currentUser.id, xp: updatedUser.xp }),
-    });
 
     set({
       currentUser: updatedUser,
@@ -542,7 +687,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Challenge actions
   loadChallenges: async () => {
-    const { currentUser } = get();
+    const { currentUser, loadLiveReturns } = get();
     if (!currentUser) return;
 
     set({ challengesLoading: true });
@@ -559,6 +704,16 @@ export const useStore = create<AppState>((set, get) => ({
           completedChallenges: data.completedChallenges || [],
           challengesLoading: false,
         });
+
+        /* Chain live-return fetch right here so we can't race against
+           the page's own loadLiveReturns effect — whoever runs last
+           wins, and previously loadChallenges (with null returns from
+           the DB) was clobbering loadLiveReturns' merged values. By
+           awaiting the merge in the same sequence, the merged result
+           is always the final state written. */
+        if ((data.activeChallenges || []).length > 0) {
+          await loadLiveReturns();
+        }
       } else {
         set({ challengesLoading: false });
       }
@@ -573,7 +728,8 @@ export const useStore = create<AppState>((set, get) => ({
     type: ChallengeType,
     timeframe: ChallengeTimeframe,
     opponentId?: string,
-    opponentPortfolioId?: string
+    opponentPortfolioId?: string,
+    opponentSymbol?: string,
   ) => {
     const { currentUser, canCreateChallenge, loadChallenges } = get();
     if (!currentUser) return { success: false, error: 'Not logged in' };
@@ -594,6 +750,9 @@ export const useStore = create<AppState>((set, get) => ({
           timeframe,
           opponentId,
           opponentPortfolioId,
+          /* Only forward opponentSymbol for ETF challenges to avoid
+             accidentally tagging sp500/user rows with a stale value. */
+          opponentSymbol: type === 'etf' ? opponentSymbol : undefined,
         }),
       });
 
@@ -724,11 +883,17 @@ export const useStore = create<AppState>((set, get) => ({
       };
     }
 
-    const requiredXp = type === 'sp500' ? CHALLENGE_XP.VS_SP500 : CHALLENGE_XP.VS_USER;
+    const requiredXp =
+      type === 'sp500'
+        ? CHALLENGE_XP.VS_SP500
+        : type === 'etf'
+        ? CHALLENGE_XP.VS_ETF
+        : CHALLENGE_XP.VS_USER;
     if (currentUser.xp < requiredXp) {
+      const shortBy = requiredXp - currentUser.xp;
       return {
         canCreate: false,
-        reason: `Need ${requiredXp} XP to cover potential loss`,
+        reason: `Need ${shortBy} more XP to wager on this fixture`,
       };
     }
 
@@ -736,6 +901,250 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   // Data loading
+  // Season / Squad actions
+  loadSeasonState: async () => {
+    try {
+      const res = await fetch('/api/season');
+      const data = await res.json();
+      if (data.success && data.seasonState) {
+        set({ seasonState: data.seasonState as SeasonState });
+      }
+    } catch (error) {
+      console.error('Failed to load season state:', error);
+    }
+  },
+
+  weekendSwap: async (portfolioId, starterSymbol, benchSymbol, allocationStrategy = 'inherit') => {
+    const { currentUser, refreshPortfolios } = get();
+    if (!currentUser) return { success: false, error: 'Not logged in' };
+    try {
+      const res = await fetch('/api/squad/swap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          portfolioId,
+          starterSymbol,
+          benchSymbol,
+          allocationStrategy,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) return { success: false, error: data.error };
+      set({ currentUser: { ...currentUser, xp: data.xp } });
+      await refreshPortfolios();
+      return { success: true, swapsRemaining: data.swapsRemaining };
+    } catch (error) {
+      console.error('weekendSwap failed:', error);
+      return { success: false, error: 'Swap failed' };
+    }
+  },
+
+  /* Batched weekend subs (item 17). Mirrors weekendSwap's shape: takes
+     the list, hands it to /api/squad/swap/batch, and refreshes XP +
+     portfolios on response. The server enforces the per-weekend cap
+     and returns a per-swap results array — surfacing it lets the UI
+     show "3 applied, 1 failed (cap reached)" instead of a flat
+     success/error. */
+  weekendSwapBatch: async (portfolioId, swaps) => {
+    const { currentUser, refreshPortfolios } = get();
+    if (!currentUser) return { success: false, error: 'Not logged in' };
+    if (!Array.isArray(swaps) || swaps.length === 0) {
+      return { success: false, error: 'No swaps requested' };
+    }
+    try {
+      const res = await fetch('/api/squad/swap/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          portfolioId,
+          swaps,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        /* Even on failure the server returns the per-swap results so
+           the UI can show which ones broke; preserve that. */
+        return {
+          success: false,
+          error: data.error,
+          results: data.results,
+          appliedCount: data.appliedCount,
+          swapsRemaining: data.swapsRemaining,
+        };
+      }
+      set({ currentUser: { ...currentUser, xp: data.xp } });
+      await refreshPortfolios();
+      return {
+        success: true,
+        appliedCount: data.appliedCount,
+        swapsRemaining: data.swapsRemaining,
+        results: data.results,
+      };
+    } catch (error) {
+      console.error('weekendSwapBatch failed:', error);
+      return { success: false, error: 'Batch swap failed' };
+    }
+  },
+
+  quarterlyTransfer: async (portfolioId, outSymbol, inSymbol, allocationStrategy, newAsset) => {
+    const { currentUser, refreshPortfolios } = get();
+    if (!currentUser) return { success: false, error: 'Not logged in' };
+    try {
+      const res = await fetch('/api/squad/transfer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          portfolioId,
+          outSymbol,
+          inSymbol,
+          inAsset: newAsset,
+          allocationStrategy,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) return { success: false, error: data.error };
+      set({ currentUser: { ...currentUser, xp: data.xp } });
+      await refreshPortfolios();
+      return { success: true, transfersRemaining: data.transfersRemaining };
+    } catch (error) {
+      console.error('quarterlyTransfer failed:', error);
+      return { success: false, error: 'Transfer failed' };
+    }
+  },
+
+  loadLiveReturns: async () => {
+    const { currentUser, challenges, activeChallenges } = get();
+    if (!currentUser || activeChallenges.length === 0) return;
+
+    try {
+      const res = await fetch(`/api/challenges/live?userId=${currentUser.id}`);
+      const data = await res.json();
+      if (!data.success || !data.live) return;
+
+      const liveMap: Record<
+        string,
+        { challengerReturnPercent: number; opponentReturnPercent: number }
+      > = data.live;
+
+      /* Merge the live numbers into both the master `challenges` array
+         and the derived `activeChallenges` slice so any consumer
+         (Fixtures page, Dashboard Live Fixtures) picks them up. */
+      const merge = (c: Challenge): Challenge => {
+        const live = liveMap[c.id];
+        if (!live) return c;
+        return {
+          ...c,
+          challengerReturnPercent: live.challengerReturnPercent,
+          opponentReturnPercent: live.opponentReturnPercent,
+        };
+      };
+
+      set({
+        challenges: challenges.map(merge),
+        activeChallenges: activeChallenges.map(merge),
+      });
+    } catch (error) {
+      console.error('Failed to load live returns:', error);
+    }
+  },
+
+  loadLessonCompletions: async () => {
+    const { currentUser } = get();
+    if (!currentUser) {
+      set({ lessonCompletions: new Set<string>(), lessonCompletionsLoaded: true });
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/training/completions?userId=${currentUser.id}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.completions)) {
+        set({
+          lessonCompletions: new Set<string>(data.completions.map((c: { lessonId: string }) => c.lessonId)),
+          lessonCompletionsLoaded: true,
+        });
+      } else {
+        set({ lessonCompletionsLoaded: true });
+      }
+    } catch (error) {
+      console.error('Failed to load lesson completions:', error);
+      set({ lessonCompletionsLoaded: true });
+    }
+  },
+
+  markLessonComplete: async (lessonId: string, moduleId: string) => {
+    const { currentUser, lessonCompletions } = get();
+    if (!currentUser) {
+      return { success: false, awarded: false, error: 'Not logged in' };
+    }
+
+    /* Optimistically mark complete in local state so the UI doesn't lag
+       behind the network round-trip. If the server fails, we roll back. */
+    const alreadyComplete = lessonCompletions.has(lessonId);
+    if (!alreadyComplete) {
+      const optimistic = new Set(lessonCompletions);
+      optimistic.add(lessonId);
+      set({ lessonCompletions: optimistic });
+    }
+
+    try {
+      const res = await fetch('/api/training/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          lessonId,
+          moduleId,
+        }),
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        /* Rollback optimistic update on failure. */
+        if (!alreadyComplete) {
+          const rollback = new Set(get().lessonCompletions);
+          rollback.delete(lessonId);
+          set({ lessonCompletions: rollback });
+        }
+        return { success: false, awarded: false, error: data.error };
+      }
+
+      /* Bump currentUser xp/level locally on first-time completion so
+         sidebar / topbar / dashboard reflect the award immediately. */
+      if (data.awarded && data.newXp !== undefined) {
+        const cur = get().currentUser;
+        if (cur) {
+          set({
+            currentUser: {
+              ...cur,
+              xp: data.newXp,
+              level: data.newLevel ?? cur.level,
+            },
+          });
+        }
+      }
+
+      return {
+        success: true,
+        awarded: !!data.awarded,
+        xpAwarded: data.xpAwarded,
+        newLevel: data.newLevel,
+        leveledUp: !!data.leveledUp,
+      };
+    } catch (error) {
+      console.error('Failed to mark lesson complete:', error);
+      if (!alreadyComplete) {
+        const rollback = new Set(get().lessonCompletions);
+        rollback.delete(lessonId);
+        set({ lessonCompletions: rollback });
+      }
+      return { success: false, awarded: false, error: 'Network error' };
+    }
+  },
+
   loadData: async () => {
     const sessionUserId = getStoredSession();
 
@@ -763,9 +1172,15 @@ export const useStore = create<AppState>((set, get) => ({
       const publicRes = await fetch('/api/portfolios');
       const publicData = await publicRes.json();
 
-      // Fetch challenges
-      const challengesRes = await fetch(`/api/challenges?userId=${sessionUserId}`);
+      // Fetch challenges + training completions + season clock in parallel
+      const [challengesRes, completionsRes, seasonRes] = await Promise.all([
+        fetch(`/api/challenges?userId=${sessionUserId}`),
+        fetch(`/api/training/completions?userId=${sessionUserId}`),
+        fetch('/api/season'),
+      ]);
       const challengesData = await challengesRes.json();
+      const completionsData = await completionsRes.json().catch(() => ({ success: false }));
+      const seasonData = await seasonRes.json().catch(() => ({ success: false }));
 
       set({
         currentUser: userData.user,
@@ -777,6 +1192,11 @@ export const useStore = create<AppState>((set, get) => ({
         pendingChallenges: challengesData.success ? challengesData.pendingInvites : [],
         activeChallenges: challengesData.success ? challengesData.activeChallenges : [],
         completedChallenges: challengesData.success ? challengesData.completedChallenges : [],
+        lessonCompletions: completionsData.success
+          ? new Set<string>(completionsData.completions.map((c: { lessonId: string }) => c.lessonId))
+          : new Set<string>(),
+        lessonCompletionsLoaded: true,
+        seasonState: seasonData.success && seasonData.seasonState ? seasonData.seasonState : null,
       });
     } catch (error) {
       console.error('Failed to load data:', error);

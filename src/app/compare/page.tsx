@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import useSWR from 'swr';
 import { useStore } from '@/store/useStore';
 import { AppLayout } from '@/components';
 import {
@@ -25,76 +25,82 @@ import {
   CustomDateRange,
   CustomComparisonSymbol,
 } from '@/types';
-import { calculatePortfolioPerformance, formatPercent, cn } from '@/lib/utils';
+import { calculatePortfolioPerformance, formatPercent } from '@/lib/utils';
 import {
+  fetchBenchmarkHistoricalData,
   getMultipleBenchmarkPerformances,
   getMultipleCustomSymbolPerformances,
 } from '@/lib/benchmarkData';
 import { calculatePortfolioHistoricalData, calculateMetricsFromHistoricalData } from '@/lib/portfolioHistoricalData';
 import { PortfolioHistoricalPoint } from '@/types';
 import { fetchMultipleFundamentals, AssetFundamentals } from '@/lib/yahooFundamentals';
-import { useTheme } from '@/components/ThemeProvider';
+import { Icon } from '@/components/stadium/Icon';
 
 const MAX_PORTFOLIOS = 4;
 const MIN_PORTFOLIOS = 1;
 
 export default function ComparePage() {
-  const { resolvedTheme } = useTheme();
-  const { currentUser, isAuthenticated, loadData, portfolios, publicPortfolios } = useStore();
+  const { currentUser, loadData, portfolios, publicPortfolios } = useStore();
   const [selectedIds, setSelectedIds] = useState<string[]>(['']);
-  const [users, setUsers] = useState<Map<string, User>>(new Map());
   const [selectedBenchmarks, setSelectedBenchmarks] = useState<BenchmarkSymbol[]>([]);
-  const [benchmarkPerformances, setBenchmarkPerformances] = useState<BenchmarkPerformance[]>([]);
   const [timeframe, setTimeframe] = useState<ComparisonTimeframe>('1M');
-  const [loadingBenchmarks, setLoadingBenchmarks] = useState(false);
   const [customDateRange, setCustomDateRange] = useState<CustomDateRange | null>(null);
   const [customSymbols, setCustomSymbols] = useState<CustomComparisonSymbol[]>([]);
-  const [customSymbolPerformances, setCustomSymbolPerformances] = useState<BenchmarkPerformance[]>([]);
-  const [portfolioHistoricalData, setPortfolioHistoricalData] = useState<Map<string, PortfolioHistoricalPoint[]>>(new Map());
-  const [loadingPortfolioData, setLoadingPortfolioData] = useState(false);
-  const [fundamentalsMap, setFundamentalsMap] = useState<Map<string, AssetFundamentals>>(new Map());
-  const [loadingFundamentals, setLoadingFundamentals] = useState(false);
-  const [spyBenchmarkReturn, setSpyBenchmarkReturn] = useState<number | null>(null);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  // Fetch SPY benchmark data for alpha calculation (always fetch regardless of user selection)
-  useEffect(() => {
-    const fetchSpyForAlpha = async () => {
-      try {
-        const { fetchBenchmarkHistoricalData } = await import('@/lib/benchmarkData');
-        const spyData = await fetchBenchmarkHistoricalData('SPY', timeframe, customDateRange);
-        if (spyData.length > 1) {
-          const firstValue = spyData[0].close;
-          const lastValue = spyData[spyData.length - 1].close;
-          const spyReturn = ((lastValue - firstValue) / firstValue) * 100;
-          setSpyBenchmarkReturn(spyReturn);
-        }
-      } catch (error) {
-        console.error('Failed to fetch SPY for alpha calculation:', error);
-        setSpyBenchmarkReturn(null);
-      }
-    };
-
-    fetchSpyForAlpha();
-  }, [timeframe, customDateRange]);
 
   // Helper to get portfolio by ID from store
   const getPortfolioById = useCallback((id: string): Portfolio | null => {
     return portfolios.find(p => p.id === id) || publicPortfolios.find(p => p.id === id) || null;
   }, [portfolios, publicPortfolios]);
 
-  // Load all users for displaying portfolio owners
-  useEffect(() => {
-    const fetchUsers = async () => {
-      const allPortfolios = [...portfolios, ...publicPortfolios];
-      const userIds = new Set(allPortfolios.map((p) => p.userId));
-      const userMap = new Map<string, User>();
+  /* --------------------------------------------------------------
+     SWR-backed fetches (item 20). Each useSWR call gives us:
+     - per-key cache + dedupe (re-mounting / switching back to the
+       page reuses the cached payload)
+     - automatic stale-while-revalidate handling — we never paint
+       a response that's older than the current key
+     - built-in cancellation on key change so old responses can't
+       clobber newer state (Marcus's stale-response complaint)
 
+     Keys are arrays so SWR's default hash distinguishes
+     selection/timeframe permutations cleanly.
+     -------------------------------------------------------------- */
+
+  // SPY benchmark for alpha — always fetched, keyed on timeframe + range.
+  const { data: spyBenchmarkReturn = null } = useSWR<number | null>(
+    ['compare:spy-alpha', timeframe, customDateRange],
+    async () => {
+      const spyData = await fetchBenchmarkHistoricalData('SPY', timeframe, customDateRange);
+      if (spyData.length <= 1) return null;
+      const firstValue = spyData[0].close;
+      const lastValue = spyData[spyData.length - 1].close;
+      return ((lastValue - firstValue) / firstValue) * 100;
+    },
+    {
+      /* Alpha is informational — don't churn the chart on focus.
+         The data changes when the user picks a new timeframe, not
+         on tab switches. */
+      revalidateOnFocus: false,
+    },
+  );
+
+  // Portfolio owners — keyed on the joined id list so adding/removing
+  // a portfolio invalidates cleanly.
+  const ownerIdsKey = useMemo(() => {
+    const allPortfolios = [...portfolios, ...publicPortfolios];
+    const ids = Array.from(new Set(allPortfolios.map((p) => p.userId))).sort();
+    return ids.length > 0 ? ids : null;
+  }, [portfolios, publicPortfolios]);
+
+  const { data: users = new Map<string, User>() } = useSWR<Map<string, User>>(
+    ownerIdsKey ? ['compare:users', ownerIdsKey] : null,
+    async ([, ids]) => {
+      const userMap = new Map<string, User>();
       await Promise.all(
-        Array.from(userIds).map(async (userId) => {
+        (ids as string[]).map(async (userId) => {
           try {
             const res = await fetch(`/api/users?id=${userId}`);
             const data = await res.json();
@@ -104,138 +110,115 @@ export default function ComparePage() {
           } catch (error) {
             console.error(`Failed to fetch user ${userId}:`, error);
           }
-        })
+        }),
       );
+      return userMap;
+    },
+    { revalidateOnFocus: false },
+  );
 
-      setUsers(userMap);
-    };
+  // Benchmark performances — combines predefined + custom symbols.
+  // Empty selection → null key so SWR skips the fetch entirely.
+  const benchmarkKey = selectedBenchmarks.length > 0
+    ? ['compare:benchmarks', selectedBenchmarks, timeframe, customDateRange] as const
+    : null;
+  const {
+    data: benchmarkPerformances = [] as BenchmarkPerformance[],
+    isLoading: loadingPredefinedBenchmarks,
+  } = useSWR<BenchmarkPerformance[]>(
+    benchmarkKey,
+    async ([, syms, tf, range]) =>
+      getMultipleBenchmarkPerformances(
+        syms as BenchmarkSymbol[],
+        tf as ComparisonTimeframe,
+        range as CustomDateRange | null,
+      ),
+    { revalidateOnFocus: false, keepPreviousData: true },
+  );
 
-    if (portfolios.length > 0 || publicPortfolios.length > 0) {
-      fetchUsers();
-    }
-  }, [portfolios, publicPortfolios]);
+  const customKey = customSymbols.length > 0
+    ? ['compare:custom-symbols', customSymbols, timeframe, customDateRange] as const
+    : null;
+  const {
+    data: customSymbolPerformances = [] as BenchmarkPerformance[],
+    isLoading: loadingCustomSymbols,
+  } = useSWR<BenchmarkPerformance[]>(
+    customKey,
+    async ([, syms, tf, range]) =>
+      getMultipleCustomSymbolPerformances(
+        syms as CustomComparisonSymbol[],
+        tf as ComparisonTimeframe,
+        range as CustomDateRange | null,
+      ),
+    { revalidateOnFocus: false, keepPreviousData: true },
+  );
 
-  // Fetch benchmark data when selected benchmarks, timeframe, or custom date range changes
-  useEffect(() => {
-    const fetchAllBenchmarks = async () => {
-      setLoadingBenchmarks(true);
-      try {
-        // Fetch predefined benchmarks
-        let benchmarkResults: BenchmarkPerformance[] = [];
-        if (selectedBenchmarks.length > 0) {
-          benchmarkResults = await getMultipleBenchmarkPerformances(
-            selectedBenchmarks,
-            timeframe,
-            customDateRange
-          );
-        }
-        setBenchmarkPerformances(benchmarkResults);
+  const loadingBenchmarks = loadingPredefinedBenchmarks || loadingCustomSymbols;
 
-        // Fetch custom symbols
-        let customResults: BenchmarkPerformance[] = [];
-        if (customSymbols.length > 0) {
-          customResults = await getMultipleCustomSymbolPerformances(
-            customSymbols,
-            timeframe,
-            customDateRange
-          );
-        }
-        setCustomSymbolPerformances(customResults);
-      } catch (error) {
-        console.error('Failed to fetch benchmark data:', error);
-        setBenchmarkPerformances([]);
-        setCustomSymbolPerformances([]);
-      } finally {
-        setLoadingBenchmarks(false);
+  // Portfolio historical data — one Map per selection. Key on the
+  // sorted, filtered id list so reordering selectedIds doesn't
+  // invalidate; key on timeframe/range so swapping refetches.
+  const selectedPortfolioIds = useMemo(
+    () => selectedIds.filter((id) => id !== '').sort(),
+    [selectedIds],
+  );
+
+  const portfolioHistoricalKey = selectedPortfolioIds.length > 0
+    ? ['compare:portfolio-historical', selectedPortfolioIds, timeframe, customDateRange] as const
+    : null;
+
+  const {
+    data: portfolioHistoricalData = new Map<string, PortfolioHistoricalPoint[]>(),
+    isLoading: loadingPortfolioData,
+  } = useSWR<Map<string, PortfolioHistoricalPoint[]>>(
+    portfolioHistoricalKey,
+    async ([, ids, tf, range]) => {
+      const newDataMap = new Map<string, PortfolioHistoricalPoint[]>();
+      await Promise.all(
+        (ids as string[]).map(async (id) => {
+          const portfolio = getPortfolioById(id);
+          if (portfolio) {
+            const historicalData = await calculatePortfolioHistoricalData(
+              portfolio,
+              tf as ComparisonTimeframe,
+              range as CustomDateRange | null,
+            );
+            newDataMap.set(id, historicalData);
+          }
+        }),
+      );
+      return newDataMap;
+    },
+    { revalidateOnFocus: false, keepPreviousData: true },
+  );
+
+  // Fundamentals — keyed on the sorted unique symbol set across all
+  // selected portfolios. Independent of timeframe (fundamentals are
+  // a snapshot, not a window).
+  const fundamentalsKey = useMemo(() => {
+    if (selectedPortfolioIds.length === 0) return null;
+    const allSymbols = new Set<string>();
+    selectedPortfolioIds.forEach((id) => {
+      const portfolio = getPortfolioById(id);
+      if (portfolio) {
+        portfolio.players.forEach((player) => {
+          if (player.asset?.symbol) {
+            allSymbols.add(player.asset.symbol.toUpperCase());
+          }
+        });
       }
-    };
+    });
+    if (allSymbols.size === 0) return null;
+    return ['compare:fundamentals', Array.from(allSymbols).sort()] as const;
+  }, [selectedPortfolioIds, getPortfolioById]);
 
-    if (selectedBenchmarks.length > 0 || customSymbols.length > 0) {
-      fetchAllBenchmarks();
-    } else {
-      setBenchmarkPerformances([]);
-      setCustomSymbolPerformances([]);
-    }
-  }, [selectedBenchmarks, customSymbols, timeframe, customDateRange]);
-
-  // Fetch real historical data for selected portfolios
-  useEffect(() => {
-    const fetchPortfolioHistorical = async () => {
-      const portfolioIds = selectedIds.filter((id) => id !== '');
-      if (portfolioIds.length === 0) {
-        setPortfolioHistoricalData(new Map());
-        return;
-      }
-
-      setLoadingPortfolioData(true);
-      try {
-        const newDataMap = new Map<string, PortfolioHistoricalPoint[]>();
-
-        await Promise.all(
-          portfolioIds.map(async (id) => {
-            const portfolio = getPortfolioById(id);
-            if (portfolio) {
-              const historicalData = await calculatePortfolioHistoricalData(
-                portfolio,
-                timeframe,
-                customDateRange
-              );
-              newDataMap.set(id, historicalData);
-            }
-          })
-        );
-
-        setPortfolioHistoricalData(newDataMap);
-      } catch (error) {
-        console.error('Failed to fetch portfolio historical data:', error);
-      } finally {
-        setLoadingPortfolioData(false);
-      }
-    };
-
-    fetchPortfolioHistorical();
-  }, [selectedIds, timeframe, customDateRange]);
-
-  // Fetch fundamentals for all assets in selected portfolios
-  useEffect(() => {
-    const fetchFundamentals = async () => {
-      const portfolioIds = selectedIds.filter((id) => id !== '');
-      if (portfolioIds.length === 0) {
-        setFundamentalsMap(new Map());
-        return;
-      }
-
-      // Collect all unique symbols from selected portfolios
-      const allSymbols = new Set<string>();
-      portfolioIds.forEach((id) => {
-        const portfolio = getPortfolioById(id);
-        if (portfolio) {
-          portfolio.players.forEach((player) => {
-            if (player.asset?.symbol) {
-              allSymbols.add(player.asset.symbol.toUpperCase());
-            }
-          });
-        }
-      });
-
-      if (allSymbols.size === 0) {
-        setFundamentalsMap(new Map());
-        return;
-      }
-
-      setLoadingFundamentals(true);
-      try {
-        const fundamentals = await fetchMultipleFundamentals(Array.from(allSymbols));
-        setFundamentalsMap(fundamentals);
-      } catch (error) {
-        console.error('Failed to fetch fundamentals:', error);
-      } finally {
-        setLoadingFundamentals(false);
-      }
-    };
-
-    fetchFundamentals();
-  }, [selectedIds]);
+  const { data: fundamentalsMap = new Map<string, AssetFundamentals>() } = useSWR<
+    Map<string, AssetFundamentals>
+  >(
+    fundamentalsKey,
+    async ([, syms]) => fetchMultipleFundamentals(syms as string[]),
+    { revalidateOnFocus: false, keepPreviousData: true },
+  );
 
   // Get selected portfolios with their performances
   const selectedPortfolios = useMemo(() => {
@@ -434,25 +417,33 @@ export default function ComparePage() {
   const canCompare = selectedPortfolios.length >= MIN_PORTFOLIOS;
 
   return (
-    <AppLayout>
-        {/* Page Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
-          <h1 className={cn('text-3xl font-bold mb-2', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>Compare Portfolios</h1>
-          <p className={cn(resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>
-            Compare up to {MAX_PORTFOLIOS} portfolios side by side to analyze their performance
-          </p>
-        </motion.div>
+    <AppLayout flush>
+      <div style={{ padding: '20px 24px 32px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {/* Header */}
+        <div>
+          <div className="kicker">TACTICS BOARD · UP TO {MAX_PORTFOLIOS} SQUADS</div>
+          <h1
+            className="display"
+            style={{
+              fontSize: 'clamp(24px, 3vw, 32px)',
+              letterSpacing: '-0.04em',
+              margin: '2px 0 0',
+            }}
+          >
+            Compare
+          </h1>
+          <div className="mono" style={{ fontSize: 12, color: 'var(--text-mute)', marginTop: 6 }}>
+            Pit up to {MAX_PORTFOLIOS} squads side-by-side against the index and any custom ticker.
+          </div>
+        </div>
 
         {/* Portfolio Selectors */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: 12,
+          }}
         >
           {selectedIds.map((_, index) => (
             <PortfolioSelector
@@ -469,29 +460,49 @@ export default function ComparePage() {
 
           {selectedIds.length < MAX_PORTFOLIOS && (
             <button
+              type="button"
               onClick={handleAddSlot}
-              className={cn(
-                'flex items-center justify-center gap-2 px-4 py-3 border border-dashed rounded-xl transition-colors',
-                resolvedTheme === 'dark'
-                  ? 'bg-slate-800/50 border-slate-700 text-slate-400 hover:text-white hover:border-slate-600'
-                  : 'bg-slate-100 border-slate-300 text-slate-600 hover:text-slate-900 hover:border-slate-400'
-              )}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                padding: '36px 14px',
+                background: 'transparent',
+                border: '1px dashed var(--line-2)',
+                borderRadius: 8,
+                color: 'var(--text-dim)',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-display)',
+                fontSize: 12,
+                fontWeight: 600,
+                letterSpacing: '0.02em',
+                transition: 'background .12s, border-color .12s, color .12s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--pitch)';
+                e.currentTarget.style.color = 'var(--pitch)';
+                e.currentTarget.style.background = 'var(--pitch-tint)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--line-2)';
+                e.currentTarget.style.color = 'var(--text-dim)';
+                e.currentTarget.style.background = 'transparent';
+              }}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add Portfolio
+              <Icon.Plus size={14} /> Add another squad
             </button>
           )}
-        </motion.div>
+        </div>
 
-        {/* Selected Portfolio Cards */}
+        {/* Selected portfolio cards */}
         {selectedPortfolios.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 12,
+            }}
           >
             {selectedPortfoliosWithRealMetrics.map((item, index) => (
               <ComparisonCard
@@ -503,78 +514,68 @@ export default function ComparePage() {
                 colorIndex={index}
               />
             ))}
-          </motion.div>
+          </div>
         )}
 
-        {/* Benchmark Selection and Timeframe */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25 }}
-          className="flex flex-col lg:flex-row gap-4 mb-8"
+        {/* Benchmark + Timeframe */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr) auto',
+            gap: 12,
+            alignItems: 'stretch',
+          }}
         >
-          <div className="flex-1">
-            <BenchmarkSelector
-              selectedBenchmarks={selectedBenchmarks}
-              onToggle={handleToggleBenchmark}
-              maxSelections={3}
-            />
-          </div>
-          <div className="flex items-start gap-4">
-            <div className={cn(
-              'rounded-xl p-4 border',
-              resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
-            )}>
-              <h3 className={cn('text-sm font-medium mb-3', resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>Timeframe</h3>
-              <div className="flex items-center gap-3">
-                <TimeframeSelector
-                  selectedTimeframe={timeframe}
-                  onSelect={(tf) => {
-                    setTimeframe(tf);
-                    setCustomDateRange(null); // Clear custom range when preset selected
-                  }}
-                  disabled={loadingBenchmarks || customDateRange !== null}
-                />
-                <CustomDateRangeSelector
-                  dateRange={customDateRange}
-                  onDateRangeChange={setCustomDateRange}
-                  disabled={loadingBenchmarks}
-                />
-              </div>
+          <BenchmarkSelector
+            selectedBenchmarks={selectedBenchmarks}
+            onToggle={handleToggleBenchmark}
+            maxSelections={3}
+          />
+          <div className="stadium-card" style={{ padding: 14, minWidth: 220 }}>
+            <div className="kicker">MATCH CLOCK</div>
+            <div className="display" style={{ fontSize: 14, letterSpacing: '-0.01em', marginTop: 1, marginBottom: 10 }}>
+              Timeframe
+            </div>
+            <div className="flex items-center flex-wrap" style={{ gap: 8 }}>
+              <TimeframeSelector
+                selectedTimeframe={timeframe}
+                onSelect={(tf) => {
+                  setTimeframe(tf);
+                  setCustomDateRange(null);
+                }}
+                disabled={loadingBenchmarks || customDateRange !== null}
+              />
+              <CustomDateRangeSelector
+                dateRange={customDateRange}
+                onDateRangeChange={setCustomDateRange}
+                disabled={loadingBenchmarks}
+              />
             </div>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Custom Symbol Search */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.28 }}
-          className="mb-8"
-        >
-          <CustomSymbolSearch
-            customSymbols={customSymbols}
-            onAddSymbol={handleAddCustomSymbol}
-            onRemoveSymbol={handleRemoveCustomSymbol}
-            maxSymbols={5}
-          />
-        </motion.div>
+        {/* Custom symbol search */}
+        <CustomSymbolSearch
+          customSymbols={customSymbols}
+          onAddSymbol={handleAddCustomSymbol}
+          onRemoveSymbol={handleRemoveCustomSymbol}
+          maxSymbols={5}
+        />
 
-        {/* Comparison Content */}
+        {/* Content */}
         {canCompare ? (
           <>
-            {/* Performance Line Chart */}
             {(selectedPortfoliosWithRealMetrics.length > 0 || allBenchmarkPerformances.length > 0) && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="mb-8"
-              >
+              <>
                 <PerformanceLineChart
                   portfolios={selectedPortfoliosWithRealMetrics.map((p, index) => ({
                     name: p.portfolio.name,
-                    color: ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b'][index % 4],
+                    color: [
+                      'oklch(0.72 0.21 145)',
+                      'oklch(0.75 0.14 230)',
+                      'oklch(0.78 0.18 320)',
+                      'oklch(0.83 0.18 90)',
+                    ][index % 4],
                     performance: p.performance,
                     createdAt: p.portfolio.createdAt,
                     realHistoricalData: portfolioHistoricalData.get(p.portfolio.id),
@@ -582,19 +583,23 @@ export default function ComparePage() {
                   benchmarks={allBenchmarkPerformances}
                 />
                 {(loadingBenchmarks || loadingPortfolioData) && (
-                  <div className="text-center text-slate-500 text-sm mt-2">
-                    Loading {loadingPortfolioData ? 'portfolio' : 'benchmark'} data...
+                  <div
+                    className="kicker"
+                    style={{ textAlign: 'center', color: 'var(--text-mute)', marginTop: -8 }}
+                  >
+                    LOADING {loadingPortfolioData ? 'SQUAD' : 'BENCHMARK'} DATA…
                   </div>
                 )}
-              </motion.div>
+              </>
             )}
 
-            {/* Metric Charts Grid */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.35 }}
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8"
+            {/* Metric chart grid */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                gap: 12,
+              }}
             >
               <MetricComparisonChart
                 performances={selectedPortfoliosWithRealMetrics.map((p) => ({
@@ -662,40 +667,31 @@ export default function ComparePage() {
                 formatValue={(v) => `${v.toFixed(1)}%`}
                 higherIsBetter={true}
               />
-            </motion.div>
+            </div>
 
             {/* Comparison Table */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-            >
-              <ComparisonTable
-                portfolioNames={selectedPortfoliosWithRealMetrics.map((p) => p.portfolio.name)}
-                performances={selectedPortfoliosWithRealMetrics.map((p) => p.performance)}
-                benchmarks={allBenchmarkPerformances}
-              />
-            </motion.div>
+            <ComparisonTable
+              portfolioNames={selectedPortfoliosWithRealMetrics.map((p) => p.portfolio.name)}
+              performances={selectedPortfoliosWithRealMetrics.map((p) => p.performance)}
+              benchmarks={allBenchmarkPerformances}
+            />
           </>
         ) : (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className={cn(
-              'rounded-2xl p-12 text-center border',
-              resolvedTheme === 'dark' ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
-            )}
+          <div
+            className="stadium-card"
+            style={{ padding: 48, textAlign: 'center', borderStyle: 'dashed' }}
           >
-            <svg className="w-16 h-16 text-slate-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            <h3 className={cn('text-xl font-semibold mb-2', resolvedTheme === 'dark' ? 'text-white' : 'text-slate-900')}>Select Portfolios to Compare</h3>
-            <p className={cn(resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-600')}>
-              Choose at least {MIN_PORTFOLIOS} portfolios from the dropdowns above to start comparing
-            </p>
-          </motion.div>
+            <Icon.Compare size={40} style={{ color: 'var(--text-mute)', margin: '0 auto 12px' }} />
+            <div className="display" style={{ fontSize: 18, marginBottom: 6 }}>
+              Pick squads to compare
+            </div>
+            <div style={{ color: 'var(--text-dim)', fontSize: 13, maxWidth: 480, margin: '0 auto' }}>
+              Choose at least {MIN_PORTFOLIOS} squad from the dropdowns above to start comparing — add benchmarks
+              and custom tickers to set the bar.
+            </div>
+          </div>
         )}
+      </div>
     </AppLayout>
   );
 }

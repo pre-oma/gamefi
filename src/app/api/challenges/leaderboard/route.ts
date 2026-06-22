@@ -14,6 +14,7 @@ export interface ChallengeLeaderboardEntry {
   xpEarned: number;
   sp500Wins: number;
   userWins: number;
+  etfWins: number;
 }
 
 // GET - Fetch challenge leaderboard
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '10');
-    const type = searchParams.get('type') || 'all'; // 'all', 'sp500', 'user'
+    const type = searchParams.get('type') || 'all'; // 'all', 'sp500', 'user', 'etf'
 
     // Get all completed challenges
     let query = supabase
@@ -33,6 +34,8 @@ export async function GET(request: NextRequest) {
       query = query.eq('type', 'sp500');
     } else if (type === 'user') {
       query = query.eq('type', 'user');
+    } else if (type === 'etf') {
+      query = query.eq('type', 'etf');
     }
 
     const { data: challenges, error } = await query;
@@ -59,7 +62,18 @@ export async function GET(request: NextRequest) {
       xpEarned: number;
       sp500Wins: number;
       userWins: number;
+      etfWins: number;
     }>();
+
+    const blankStats = () => ({
+      wins: 0,
+      losses: 0,
+      draws: 0,
+      xpEarned: 0,
+      sp500Wins: 0,
+      userWins: 0,
+      etfWins: 0,
+    });
 
     for (const challenge of challenges) {
       const challengerId = challenge.challenger_id;
@@ -67,10 +81,12 @@ export async function GET(request: NextRequest) {
       const winnerId = challenge.winner_id;
       const xpAwarded = challenge.xp_awarded || 0;
       const isSp500 = challenge.type === 'sp500';
+      const isEtf = challenge.type === 'etf';
+      const isBenchmark = isSp500 || isEtf;
 
       // Initialize stats for challenger
       if (!userStats.has(challengerId)) {
-        userStats.set(challengerId, { wins: 0, losses: 0, draws: 0, xpEarned: 0, sp500Wins: 0, userWins: 0 });
+        userStats.set(challengerId, blankStats());
       }
 
       const challengerStats = userStats.get(challengerId)!;
@@ -78,11 +94,9 @@ export async function GET(request: NextRequest) {
       if (winnerId === challengerId) {
         challengerStats.wins++;
         challengerStats.xpEarned += xpAwarded;
-        if (isSp500) {
-          challengerStats.sp500Wins++;
-        } else {
-          challengerStats.userWins++;
-        }
+        if (isSp500) challengerStats.sp500Wins++;
+        else if (isEtf) challengerStats.etfWins++;
+        else challengerStats.userWins++;
       } else if (winnerId === null) {
         challengerStats.draws++;
       } else {
@@ -91,9 +105,9 @@ export async function GET(request: NextRequest) {
       }
 
       // For user challenges, also track opponent stats
-      if (!isSp500 && opponentId) {
+      if (!isBenchmark && opponentId) {
         if (!userStats.has(opponentId)) {
-          userStats.set(opponentId, { wins: 0, losses: 0, draws: 0, xpEarned: 0, sp500Wins: 0, userWins: 0 });
+          userStats.set(opponentId, blankStats());
         }
 
         const opponentStats = userStats.get(opponentId)!;
@@ -143,6 +157,7 @@ export async function GET(request: NextRequest) {
         xpEarned: stats.xpEarned,
         sp500Wins: stats.sp500Wins,
         userWins: stats.userWins,
+        etfWins: stats.etfWins,
       });
     }
 

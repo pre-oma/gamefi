@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '@/lib/supabase';
+import { requireSessionUserId } from '@/lib/session';
 import {
   Challenge,
   ChallengeType,
@@ -11,6 +12,7 @@ import {
   MAX_ACTIVE_CHALLENGES,
   CHALLENGE_TIMEFRAMES,
 } from '@/types';
+import { fetchYahooHistorical } from '@/lib/yahooHistorical';
 
 // Helper to create notification
 async function createNotification(
@@ -44,6 +46,7 @@ function dbToChallenge(db: Record<string, unknown>): Challenge {
     challengerPortfolioId: db.challenger_portfolio_id as string,
     opponentId: db.opponent_id as string | null,
     opponentPortfolioId: db.opponent_portfolio_id as string | null,
+    opponentSymbol: (db.opponent_symbol as string | null) ?? null,
     timeframe: db.timeframe as ChallengeTimeframe,
     startDate: db.start_date as string | null,
     endDate: db.end_date as string | null,
@@ -145,6 +148,12 @@ export async function GET(request: NextRequest) {
         challenge.opponentUsername = 'S&P 500';
         challenge.opponentAvatar = '/sp500-logo.png';
         challenge.opponentPortfolioName = 'SPY Index';
+      } else if (challenge.type === 'etf' && challenge.opponentSymbol) {
+        /* ETF challenges: surface the ticker as the opponent label so
+           cards/lists render "QQQ" / "VTI" instead of an empty slot. */
+        challenge.opponentUsername = challenge.opponentSymbol;
+        challenge.opponentAvatar = '/sp500-logo.png';
+        challenge.opponentPortfolioName = `${challenge.opponentSymbol} Index`;
       }
 
       formattedChallenges.push(challenge);
@@ -190,6 +199,7 @@ export async function POST(request: NextRequest) {
       timeframe,
       opponentId,
       opponentPortfolioId,
+      opponentSymbol,
     } = body as {
       challengerId: string;
       challengerPortfolioId: string;
@@ -197,18 +207,25 @@ export async function POST(request: NextRequest) {
       timeframe: ChallengeTimeframe;
       opponentId?: string;
       opponentPortfolioId?: string;
+      opponentSymbol?: string;
     };
 
     // Validate required fields
-    if (!challengerId || !challengerPortfolioId || !type || !timeframe) {
+    if (!challengerPortfolioId || !type || !timeframe) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
+    /* Auth: challengerId is whatever the session says it is. Body
+       challengerId is optional but if present must match. */
+    const sessionResult = requireSessionUserId(request, challengerId);
+    if (sessionResult instanceof NextResponse) return sessionResult;
+    const sessionChallengerId = sessionResult;
+
     // Validate type
-    if (type !== 'sp500' && type !== 'user') {
+    if (type !== 'sp500' && type !== 'user' && type !== 'etf') {
       return NextResponse.json(
         { success: false, error: 'Invalid challenge type' },
         { status: 400 }
@@ -223,11 +240,60 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    /* ETF challenges require a ticker symbol. We validate it against
+       Yahoo Finance live — bogus tickers (e.g. ZZZZZZ) come back ok=false
+       and we reject the request before persisting. Costs one Yahoo
+       round-trip per ETF challenge creation, which is acceptable. */
+    let normalizedEtfSymbol: string | null = null;
+    if (type === 'etf') {
+      if (!opponentSymbol || typeof opponentSymbol !== 'string') {
+        return NextResponse.json(
+          { success: false, error: 'ETF challenges require a ticker symbol' },
+          { status: 400 }
+        );
+      }
+
+      const candidate = opponentSymbol.trim().toUpperCase();
+      /* Pull ~1mo of data to confirm the ticker exists. We don't use
+         the data here — the settle/live routes refetch for the actual
+         period. Cheap enough; Yahoo returns 404 on unknown tickers. */
+      const probe = await fetchYahooHistorical({
+        symbol: candidate,
+        timeframe: '1M',
+      });
+
+      if (!probe.ok || probe.data.length === 0) {
+        return NextResponse.json(
+          { success: false, error: `Symbol "${candidate}" not found on Yahoo Finance` },
+          { status: 400 }
+        );
+      }
+
+      normalizedEtfSymbol = candidate;
+    }
+
+    /* Verify the challenger actually owns challengerPortfolioId.
+       Without this check, anyone with a session could create a fixture
+       wagering somebody else's squad. */
+    {
+      const { data: ownedPortfolio } = await supabase
+        .from('portfolios')
+        .select('user_id')
+        .eq('id', challengerPortfolioId)
+        .single();
+      if (!ownedPortfolio || ownedPortfolio.user_id !== sessionChallengerId) {
+        return NextResponse.json(
+          { success: false, error: 'Not authorized to challenge with that squad' },
+          { status: 403 },
+        );
+      }
+    }
+
     // Get user's current XP and active challenge count
     const { data: user, error: userError } = await supabase
       .from('users')
       .select('xp')
-      .eq('id', challengerId)
+      .eq('id', sessionChallengerId)
       .single();
 
     if (userError || !user) {
@@ -241,7 +307,7 @@ export async function POST(request: NextRequest) {
     const { count, error: countError } = await supabase
       .from('challenges')
       .select('id', { count: 'exact', head: true })
-      .or(`challenger_id.eq.${challengerId},opponent_id.eq.${challengerId}`)
+      .or(`challenger_id.eq.${sessionChallengerId},opponent_id.eq.${sessionChallengerId}`)
       .in('status', ['pending', 'active']);
 
     if (countError) {
@@ -261,8 +327,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check XP requirement
-    const requiredXp = type === 'sp500' ? CHALLENGE_XP.VS_SP500 : CHALLENGE_XP.VS_USER;
+    // Check XP requirement — base XP only; multiplier applies at settle
+    const requiredXp =
+      type === 'sp500'
+        ? CHALLENGE_XP.VS_SP500
+        : type === 'etf'
+        ? CHALLENGE_XP.VS_ETF
+        : CHALLENGE_XP.VS_USER;
     if (user.xp < requiredXp) {
       return NextResponse.json(
         {
@@ -278,12 +349,12 @@ export async function POST(request: NextRequest) {
     const timeframeDays = CHALLENGE_TIMEFRAMES.find((t) => t.value === timeframe)?.days || 7;
     const endDate = new Date(now.getTime() + timeframeDays * 24 * 60 * 60 * 1000);
 
-    // For S&P 500 challenges, start immediately
-    // For user challenges, wait for acceptance (pending)
-    const isSp500 = type === 'sp500';
-    const status: ChallengeStatus = isSp500 ? 'active' : 'pending';
-    const startDate = isSp500 ? now.toISOString() : null;
-    const calculatedEndDate = isSp500 ? endDate.toISOString() : null;
+    /* sp500 + etf challenges start immediately (no opponent to wait on);
+       user challenges go pending until the opponent accepts. */
+    const startsImmediately = type === 'sp500' || type === 'etf';
+    const status: ChallengeStatus = startsImmediately ? 'active' : 'pending';
+    const startDate = startsImmediately ? now.toISOString() : null;
+    const calculatedEndDate = startsImmediately ? endDate.toISOString() : null;
 
     // Create challenge
     const challengeId = uuidv4();
@@ -293,15 +364,16 @@ export async function POST(request: NextRequest) {
         id: challengeId,
         type,
         status,
-        challenger_id: challengerId,
+        challenger_id: sessionChallengerId,
         challenger_portfolio_id: challengerPortfolioId,
         opponent_id: type === 'user' ? opponentId : null,
         opponent_portfolio_id: type === 'user' ? opponentPortfolioId : null,
+        opponent_symbol: normalizedEtfSymbol,
         timeframe,
         start_date: startDate,
         end_date: calculatedEndDate,
-        challenger_start_value: isSp500 ? 10000 : null, // Will be calculated from portfolio
-        opponent_start_value: isSp500 ? 10000 : null,
+        challenger_start_value: startsImmediately ? 10000 : null, // Will be calculated from portfolio
+        opponent_start_value: startsImmediately ? 10000 : null,
         created_at: now.toISOString(),
       })
       .select()
@@ -321,23 +393,26 @@ export async function POST(request: NextRequest) {
       const { data: challenger } = await supabase
         .from('users')
         .select('username')
-        .eq('id', challengerId)
+        .eq('id', sessionChallengerId)
         .single();
 
       await createNotification(
         opponentId,
         'challenge_received',
         `${challenger?.username || 'Someone'} has challenged you to a portfolio battle!`,
-        { challengeId: challenge.id, challengerId }
+        { challengeId: challenge.id, challengerId: sessionChallengerId }
       );
     }
 
     return NextResponse.json({
       success: true,
       challenge,
-      message: isSp500
-        ? 'Challenge started! Track your performance against the S&P 500.'
-        : 'Challenge sent! Waiting for opponent to accept.',
+      message:
+        type === 'sp500'
+          ? 'Challenge started! Track your performance against the S&P 500.'
+          : type === 'etf'
+          ? `Challenge started! Track your performance against ${normalizedEtfSymbol}.`
+          : 'Challenge sent! Waiting for opponent to accept.',
     });
   } catch (error) {
     console.error('Create challenge error:', error);
@@ -359,12 +434,18 @@ export async function PUT(request: NextRequest) {
       portfolioId?: string;
     };
 
-    if (!challengeId || !action || !userId) {
+    if (!challengeId || !action) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields' },
         { status: 400 }
       );
     }
+
+    /* Auth: session owns the action. Body userId, if present, must
+       match the session. */
+    const sessionResult = requireSessionUserId(request, userId);
+    if (sessionResult instanceof NextResponse) return sessionResult;
+    const sessionUserId = sessionResult;
 
     // Get the challenge
     const { data: challenge, error: fetchError } = await supabase
@@ -380,9 +461,9 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // Validate action based on user role
-    const isChallenger = challenge.challenger_id === userId;
-    const isOpponent = challenge.opponent_id === userId;
+    // Validate action based on user role (session id, not body)
+    const isChallenger = challenge.challenger_id === sessionUserId;
+    const isOpponent = challenge.opponent_id === sessionUserId;
 
     if (!isChallenger && !isOpponent) {
       return NextResponse.json(
@@ -407,11 +488,29 @@ export async function PUT(request: NextRequest) {
         );
       }
 
+      /* Ownership of the opponent's portfolioId. The accepter passes
+         which of THEIR squads to field; reject if they don't own it.
+         Without this check, anyone accepting could wager another
+         user's squad. */
+      if (portfolioId) {
+        const { data: ownedPortfolio } = await supabase
+          .from('portfolios')
+          .select('user_id')
+          .eq('id', portfolioId)
+          .single();
+        if (!ownedPortfolio || ownedPortfolio.user_id !== sessionUserId) {
+          return NextResponse.json(
+            { success: false, error: 'Not authorized to accept with that squad' },
+            { status: 403 },
+          );
+        }
+      }
+
       // Check opponent's XP
       const { data: opponent } = await supabase
         .from('users')
         .select('xp')
-        .eq('id', userId)
+        .eq('id', sessionUserId)
         .single();
 
       if (!opponent || opponent.xp < CHALLENGE_XP.VS_USER) {
@@ -428,7 +527,7 @@ export async function PUT(request: NextRequest) {
       const { count } = await supabase
         .from('challenges')
         .select('id', { count: 'exact', head: true })
-        .or(`challenger_id.eq.${userId},opponent_id.eq.${userId}`)
+        .or(`challenger_id.eq.${sessionUserId},opponent_id.eq.${sessionUserId}`)
         .in('status', ['pending', 'active']);
 
       if ((count || 0) >= MAX_ACTIVE_CHALLENGES) {
@@ -473,7 +572,7 @@ export async function PUT(request: NextRequest) {
       const { data: accepter } = await supabase
         .from('users')
         .select('username')
-        .eq('id', userId)
+        .eq('id', sessionUserId)
         .single();
 
       await createNotification(
@@ -524,7 +623,7 @@ export async function PUT(request: NextRequest) {
       const { data: decliner } = await supabase
         .from('users')
         .select('username')
-        .eq('id', userId)
+        .eq('id', sessionUserId)
         .single();
 
       await createNotification(
