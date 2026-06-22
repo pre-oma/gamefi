@@ -107,7 +107,7 @@ export const LeaderboardTable: React.FC = () => {
         <div style={{ padding: 48, textAlign: 'center' }}>
           <Icon.Trophy size={36} style={{ color: 'var(--text-mute)', margin: '0 auto 12px' }} />
           <div className="display" style={{ fontSize: 16, marginBottom: 4 }}>
-            No managers ranked yet
+            Leaderboard fills up as managers go public.
           </div>
           <div className="mono" style={{ fontSize: 11, color: 'var(--text-mute)' }}>
             Make your squad public to climb the table.

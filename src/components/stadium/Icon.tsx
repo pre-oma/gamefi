@@ -141,6 +141,14 @@ export const Icon = {
       <path d="M10 19 A2 2 0 0 0 14 19" />
     </SvgIcon>
   ),
+  /* Envelope — distinct from Bell so email fields don't look like
+     notification opt-ins (Sprint 5, Sarah). */
+  Envelope: (p: IconProps) => (
+    <SvgIcon {...p}>
+      <rect x="3" y="6" width="18" height="12" rx="1.5" />
+      <path d="M3 8 L12 13.5 L21 8" />
+    </SvgIcon>
+  ),
   Search: (p: IconProps) => (
     <SvgIcon {...p}>
       <circle cx="11" cy="11" r="6.5" />

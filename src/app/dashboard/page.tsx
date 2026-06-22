@@ -63,9 +63,9 @@ export default function DashboardPage() {
     currentUser,
     portfolios,
     createPortfolio,
-    canCreateTeam,
-    getTeamSlotInfo,
-    unlockTeamSlot,
+    canCreateSquad,
+    getSquadSlotInfo,
+    unlockSquadSlot,
     activeChallenges,
     pendingChallenges,
     loadChallenges,
@@ -264,11 +264,11 @@ export default function DashboardPage() {
   }, [topPerformersData]);
 
   const levelInfo = currentUser ? calculateLevel(currentUser.xp) : null;
-  const slotInfo = getTeamSlotInfo();
+  const slotInfo = getSquadSlotInfo();
 
   const handleCreatePortfolio = async () => {
     if (!newPortfolioName.trim()) return;
-    if (!canCreateTeam()) return;
+    if (!canCreateSquad()) return;
     try {
       const portfolio = await createPortfolio(newPortfolioName, newPortfolioDesc, selectedFormation);
       setShowCreateModal(false);
@@ -338,10 +338,10 @@ export default function DashboardPage() {
                 type="button"
                 className="stadium-btn stadium-btn-primary"
                 onClick={() => setShowCreateModal(true)}
-                disabled={!canCreateTeam()}
-                style={{ opacity: canCreateTeam() ? 1 : 0.5, cursor: canCreateTeam() ? 'pointer' : 'not-allowed' }}
+                disabled={!canCreateSquad()}
+                style={{ opacity: canCreateSquad() ? 1 : 0.5, cursor: canCreateSquad() ? 'pointer' : 'not-allowed' }}
               >
-                <Icon.Plus size={16} /> Field a new XI
+                <Icon.Plus size={16} /> Build a new squad
               </button>
             </div>
           </div>
@@ -415,13 +415,13 @@ export default function DashboardPage() {
               sub={`${slotInfo.current} of ${slotInfo.max} slots used`}
               right={
                 <div className="flex items-center" style={{ gap: 8 }}>
-                  {!canCreateTeam() && (
+                  {!canCreateSquad() && (
                     <button
                       type="button"
                       className="stadium-btn stadium-btn-ghost"
                       style={{ padding: '6px 12px', fontSize: 11 }}
                       onClick={async () => {
-                        await unlockTeamSlot();
+                        await unlockSquadSlot();
                       }}
                       disabled={!slotInfo.canUnlock}
                       title={
@@ -460,7 +460,7 @@ export default function DashboardPage() {
                   type="button"
                   className="stadium-btn stadium-btn-primary"
                   onClick={() => setShowCreateModal(true)}
-                  disabled={!canCreateTeam()}
+                  disabled={!canCreateSquad()}
                 >
                   <Icon.Plus size={14} /> Field your first XI
                 </button>
@@ -545,8 +545,16 @@ export default function DashboardPage() {
               />
               <div className="stadium-card" style={{ overflow: 'hidden' }}>
                 {topPerformers.length === 0 ? (
-                  <div className="kicker" style={{ padding: 24, textAlign: 'center' }}>
-                    NO RIVALS YET
+                  <div
+                    style={{
+                      padding: 24,
+                      textAlign: 'center',
+                      color: 'var(--text-dim)',
+                      fontSize: 12,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Leaderboard fills up as managers go public.
                   </div>
                 ) : (
                   topPerformers.map((entry, i) => (
@@ -671,7 +679,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Create Portfolio Modal */}
-      <Modal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} title="Field a new XI" size="md">
+      <Modal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} title="Build a new squad" size="md">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <Input
             label="Squad Name"
@@ -740,7 +748,7 @@ export default function DashboardPage() {
               className="stadium-btn stadium-btn-primary"
               style={{ flex: 1, justifyContent: 'center', padding: '12px 20px' }}
               onClick={handleCreatePortfolio}
-              disabled={!newPortfolioName.trim() || !canCreateTeam()}
+              disabled={!newPortfolioName.trim() || !canCreateSquad()}
             >
               Field the XI
             </button>

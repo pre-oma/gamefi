@@ -474,10 +474,23 @@ export default function PortfolioDetailPage() {
               {(portfolio.description || owner) && (
                 <div className="mono" style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 4, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   {owner && (
-                    <span className="flex items-center" style={{ gap: 6 }}>
+                    /* Treat avatar + handle as a single semantic
+                       element — screen readers shouldn't get a blank
+                       alt image followed by an orphan @handle. */
+                    <Link
+                      href={`/profile/${portfolio.userId}`}
+                      aria-label={`Manager @${owner.username} — view profile`}
+                      className="flex items-center"
+                      style={{
+                        gap: 6,
+                        textDecoration: 'none',
+                        color: 'inherit',
+                      }}
+                    >
                       <img
                         src={owner.avatar}
                         alt=""
+                        aria-hidden="true"
                         style={{
                           width: 16,
                           height: 16,
@@ -486,8 +499,8 @@ export default function PortfolioDetailPage() {
                           objectFit: 'cover',
                         }}
                       />
-                      @{owner.username}
-                    </span>
+                      <span>@{owner.username}</span>
+                    </Link>
                   )}
                   {portfolio.description && <span>· {portfolio.description}</span>}
                 </div>
@@ -524,6 +537,8 @@ export default function PortfolioDetailPage() {
                   type="button"
                   onClick={handleLike}
                   className="stadium-btn stadium-btn-ghost"
+                  aria-label={hasLiked ? 'Unlike portfolio' : 'Like portfolio'}
+                  aria-pressed={hasLiked}
                   style={{
                     padding: '6px 10px',
                     fontSize: 11,

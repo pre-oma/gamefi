@@ -338,6 +338,8 @@ export default function SettingsPage() {
                   key={mode}
                   type="button"
                   onClick={() => setTheme(mode as ThemeMode)}
+                  aria-pressed={isActive}
+                  aria-label={`Set theme to ${label}`}
                   style={{
                     padding: 14,
                     borderRadius: 8,
@@ -380,7 +382,7 @@ export default function SettingsPage() {
             <div className="kicker" style={{ color: 'var(--ref-red)' }}>DANGER ZONE</div>
           </div>
           <div className="display" style={{ fontSize: 16, letterSpacing: '-0.02em', marginBottom: 6 }}>
-            Disband your manager account
+            Delete your account
           </div>
           <p style={{ color: 'var(--text-dim)', fontSize: 13, margin: 0, marginBottom: 14, lineHeight: 1.55 }}>
             Once you delete your account, there&apos;s no going back. All squads, fixtures, badges, and XP are wiped.
@@ -395,7 +397,7 @@ export default function SettingsPage() {
       <Modal
         isOpen={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
-        title="Disband manager account?"
+        title="Delete your account?"
         subtitle="DANGER ZONE · IRREVERSIBLE"
         size="sm"
       >

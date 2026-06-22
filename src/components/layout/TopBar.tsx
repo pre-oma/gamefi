@@ -204,7 +204,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed })
             className="stadium-btn stadium-btn-ghost tap44"
             style={{ padding: '8px 10px' }}
             onClick={() => setTheme(isDark ? 'light' : 'dark')}
-            aria-label="Toggle theme"
+            aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
           >
             {isDark ? <Icon.Sun size={16} /> : <Icon.Moon size={16} />}
           </button>
@@ -215,7 +215,11 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed })
               onClick={() => setShowNotifications(!showNotifications)}
               className="stadium-btn stadium-btn-ghost tap44"
               style={{ padding: '8px 10px', position: 'relative' }}
-              aria-label="Notifications"
+              aria-label={
+                unreadCount > 0
+                  ? `${unreadCount} unread notifications`
+                  : 'Notifications (none unread)'
+              }
             >
               <Icon.Bell size={16} />
               {unreadCount > 0 && (
@@ -314,6 +318,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed })
           <div className="relative">
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
+              aria-label="User menu"
               style={{
                 display: 'flex',
                 alignItems: 'center',

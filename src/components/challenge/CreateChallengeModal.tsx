@@ -438,6 +438,26 @@ export const CreateChallengeModal: React.FC<CreateChallengeModalProps> = ({
               />
             )}
           </div>
+          {/* Plain-English XP rule so Sarah doesn't have to guess
+              whether losing burns XP. The XP at stake row above is the
+              upside; this clarifies the downside. */}
+          <div
+            className="mono"
+            style={{
+              marginTop: 10,
+              paddingTop: 10,
+              borderTop: '1px solid var(--line)',
+              fontSize: 10,
+              lineHeight: 1.55,
+              color: 'var(--text-mute)',
+              letterSpacing: '0.04em',
+            }}
+          >
+            Win: <span style={{ color: 'var(--pitch)', fontWeight: 700 }}>+{totalXp} XP</span>{' '}
+            · Lose:{' '}
+            <span style={{ color: 'var(--text-dim)', fontWeight: 700 }}>0 XP</span>{' '}
+            (fixtures don&apos;t cost XP).
+          </div>
         </div>
 
         {/* Footer */}

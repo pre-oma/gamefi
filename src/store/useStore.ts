@@ -81,9 +81,9 @@ interface AppState {
   updatePlayerWeights: (portfolioId: string, weights: { positionId: string; allocation: number }[]) => Promise<void>;
   likePortfolio: (portfolioId: string) => Promise<void>;
   clonePortfolio: (portfolioId: string) => Promise<Portfolio | null>;
-  canCreateTeam: () => boolean;
-  getTeamSlotInfo: () => { current: number; max: number; canUnlock: boolean; unlockCost: number };
-  unlockTeamSlot: () => Promise<boolean>;
+  canCreateSquad: () => boolean;
+  getSquadSlotInfo: () => { current: number; max: number; canUnlock: boolean; unlockCost: number };
+  unlockSquadSlot: () => Promise<boolean>;
 
   // Actions - Social
   followUser: (targetUserId: string) => void;
@@ -304,14 +304,14 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   // Portfolio actions
-  canCreateTeam: () => {
+  canCreateSquad: () => {
     const { currentUser, portfolios } = get();
     if (!currentUser) return false;
     const maxTeams = currentUser.maxTeams ?? DEFAULT_MAX_TEAMS;
     return portfolios.length < maxTeams;
   },
 
-  getTeamSlotInfo: () => {
+  getSquadSlotInfo: () => {
     const { currentUser, portfolios } = get();
     if (!currentUser) {
       return { current: 0, max: DEFAULT_MAX_TEAMS, canUnlock: false, unlockCost: TEAM_SLOT_UNLOCK_COST };
@@ -326,7 +326,7 @@ export const useStore = create<AppState>((set, get) => ({
     };
   },
 
-  unlockTeamSlot: async () => {
+  unlockSquadSlot: async () => {
     const { currentUser } = get();
     if (!currentUser) return false;
     if (currentUser.xp < TEAM_SLOT_UNLOCK_COST) return false;
@@ -335,7 +335,7 @@ export const useStore = create<AppState>((set, get) => ({
       const response = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: currentUser.id, action: 'unlockTeamSlot' }),
+        body: JSON.stringify({ userId: currentUser.id, action: 'unlockSquadSlot' }),
       });
 
       const result = await response.json();
@@ -357,11 +357,11 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   createPortfolio: async (name: string, description: string, formation: Formation) => {
-    const { currentUser, canCreateTeam } = get();
+    const { currentUser, canCreateSquad } = get();
     if (!currentUser) throw new Error('Must be logged in');
 
-    if (!canCreateTeam()) {
-      throw new Error('Team limit reached. Unlock more slots with XP.');
+    if (!canCreateSquad()) {
+      throw new Error('Squad limit reached. Unlock more slots with XP.');
     }
 
     const positions = FORMATIONS[formation];
@@ -890,9 +890,10 @@ export const useStore = create<AppState>((set, get) => ({
         ? CHALLENGE_XP.VS_ETF
         : CHALLENGE_XP.VS_USER;
     if (currentUser.xp < requiredXp) {
+      const shortBy = requiredXp - currentUser.xp;
       return {
         canCreate: false,
-        reason: `Need ${requiredXp} XP to cover potential loss`,
+        reason: `Need ${shortBy} more XP to wager on this fixture`,
       };
     }
 

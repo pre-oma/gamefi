@@ -36,9 +36,9 @@ export default function TemplatesPage() {
     currentUser,
     createPortfolio,
     assignAssetToPosition,
-    canCreateTeam,
-    getTeamSlotInfo,
-    unlockTeamSlot,
+    canCreateSquad,
+    getSquadSlotInfo,
+    unlockSquadSlot,
   } = useStore();
   const [selectedCategory, setSelectedCategory] = useState<TemplateCategory | 'all'>('all');
   const [creatingFromTemplate, setCreatingFromTemplate] = useState<string | null>(null);
@@ -47,7 +47,7 @@ export default function TemplatesPage() {
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [pendingTemplateId, setPendingTemplateId] = useState<string | null>(null);
 
-  const teamSlotInfo = getTeamSlotInfo();
+  const teamSlotInfo = getSquadSlotInfo();
 
   const filteredTemplates = PORTFOLIO_TEMPLATES.filter(
     (t) => selectedCategory === 'all' || t.category === selectedCategory,
@@ -80,7 +80,7 @@ export default function TemplatesPage() {
       router.push('/');
       return;
     }
-    if (!canCreateTeam()) {
+    if (!canCreateSquad()) {
       setPendingTemplateId(templateId);
       setShowLimitModal(true);
       return;
@@ -120,7 +120,7 @@ export default function TemplatesPage() {
   };
 
   const handleUnlockSlot = async () => {
-    const success = await unlockTeamSlot();
+    const success = await unlockSquadSlot();
     if (success && pendingTemplateId) {
       setShowLimitModal(false);
       await createFromTemplate(pendingTemplateId);

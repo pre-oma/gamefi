@@ -19,9 +19,9 @@ export default function PortfolioListPage() {
   const {
     portfolios,
     createPortfolio,
-    canCreateTeam,
-    getTeamSlotInfo,
-    unlockTeamSlot,
+    canCreateSquad,
+    getSquadSlotInfo,
+    unlockSquadSlot,
     seasonState,
   } = useStore();
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -60,10 +60,10 @@ export default function PortfolioListPage() {
     return { totalValue, avgReturn };
   }, [portfolios, perfMap]);
 
-  const slotInfo = getTeamSlotInfo();
+  const slotInfo = getSquadSlotInfo();
 
   const handleCreatePortfolio = async () => {
-    if (!newPortfolioName.trim() || !canCreateTeam()) return;
+    if (!newPortfolioName.trim() || !canCreateSquad()) return;
     try {
       const portfolio = await createPortfolio(newPortfolioName, newPortfolioDesc, selectedFormation);
       setShowCreateModal(false);
@@ -95,12 +95,12 @@ export default function PortfolioListPage() {
             </div>
           </div>
           <div className="flex items-center" style={{ gap: 10, flexWrap: 'wrap' }}>
-            {!canCreateTeam() && (
+            {!canCreateSquad() && (
               <button
                 type="button"
                 className="stadium-btn stadium-btn-ghost"
                 onClick={async () => {
-                  await unlockTeamSlot();
+                  await unlockSquadSlot();
                 }}
                 disabled={!slotInfo.canUnlock}
                 title={
@@ -116,10 +116,10 @@ export default function PortfolioListPage() {
               type="button"
               className="stadium-btn stadium-btn-primary"
               onClick={() => setShowCreateModal(true)}
-              disabled={!canCreateTeam()}
-              style={{ opacity: canCreateTeam() ? 1 : 0.5 }}
+              disabled={!canCreateSquad()}
+              style={{ opacity: canCreateSquad() ? 1 : 0.5 }}
             >
-              <Icon.Plus size={14} /> Field a new XI
+              <Icon.Plus size={14} /> Build a new squad
             </button>
           </div>
         </div>
@@ -235,14 +235,14 @@ export default function PortfolioListPage() {
               No squads yet
             </div>
             <div style={{ color: 'var(--text-dim)', fontSize: 14, maxWidth: 480, margin: '0 auto 22px' }}>
-              Pick a formation. Fill the lineup with eleven tickers. Captain your top pick. The market is your match clock.
+              Pick a formation. Sign your XI. Beat the index.
             </div>
             <button
               type="button"
               className="stadium-btn stadium-btn-primary"
               style={{ padding: '12px 20px', fontSize: 14 }}
               onClick={() => setShowCreateModal(true)}
-              disabled={!canCreateTeam()}
+              disabled={!canCreateSquad()}
             >
               <Icon.Plus size={16} /> Field your first XI
             </button>
@@ -280,7 +280,7 @@ export default function PortfolioListPage() {
       <Modal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        title="Field a new XI"
+        title="Build a new squad"
         size="md"
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -348,7 +348,7 @@ export default function PortfolioListPage() {
               className="stadium-btn stadium-btn-primary"
               style={{ flex: 1, justifyContent: 'center', padding: '12px 20px' }}
               onClick={handleCreatePortfolio}
-              disabled={!newPortfolioName.trim() || !canCreateTeam()}
+              disabled={!newPortfolioName.trim() || !canCreateSquad()}
             >
               Field the XI
             </button>

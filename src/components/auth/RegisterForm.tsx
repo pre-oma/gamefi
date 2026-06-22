@@ -169,8 +169,8 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchToLogin }) =
             style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
           >
             <Input
-              label="Username"
-              placeholder="Choose a manager handle"
+              label="Username (visible to other managers)"
+              placeholder="e.g. midfield_maven"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               leftIcon={<Icon.Profile size={14} />}
@@ -182,7 +182,9 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchToLogin }) =
               placeholder="you@email.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              leftIcon={<Icon.Bell size={14} />}
+              /* Was Icon.Bell, which read as a notifications opt-in.
+                 Use the envelope (Sprint 5, Sarah). */
+              leftIcon={<Icon.Envelope size={14} />}
             />
 
             <Input

@@ -285,8 +285,21 @@ export default function Home() {
           }}
         >
           <div>
-            <div className="pill pill-pitch" style={{ marginBottom: 22 }}>
-              <span className="live-dot" style={{ background: 'var(--pitch)' }} /> SEASON 1 — NOW OPEN
+            <div className="flex flex-wrap" style={{ gap: 8, marginBottom: 22 }}>
+              <span
+                className="pill"
+                style={{
+                  background: 'var(--pitch-tint)',
+                  color: 'var(--pitch)',
+                  border: '1px solid oklch(0.72 0.21 145 / 0.3)',
+                }}
+                title="This is a paper-trading game. Zero real money at risk."
+              >
+                PAPER MONEY · NO REAL CASH AT RISK
+              </span>
+              <span className="pill pill-pitch">
+                <span className="live-dot" style={{ background: 'var(--pitch)' }} /> SEASON 1 — NOW OPEN
+              </span>
             </div>
             <h1
               className="display"
@@ -338,9 +351,11 @@ export default function Home() {
                 maxWidth: 520,
               }}
             >
-              Pick eleven stocks. Field them in a formation. Captain your top pick.
-              Win XP when your XI beats the index — or the manager next door. Paper
-              money only. Real lessons.{' '}
+              <span style={{ color: 'var(--text)', fontWeight: 600 }}>
+                Practice with fake money. Real prices, zero financial risk.
+              </span>{' '}
+              Pick eleven stocks. Field them in a formation. Win XP when your XI
+              beats the index — or the manager next door.{' '}
               <span style={{ color: 'var(--text)', fontWeight: 600 }}>No credit card.</span>
             </p>
 

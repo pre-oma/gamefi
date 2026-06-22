@@ -12,20 +12,24 @@ type NavItem = {
   href: string;
   label: string;
   icon: IconName;
+  /* Plain-English helper shown under the label in expanded mode
+     (Sprint 5, Sarah). Soccer vocabulary lands harder if every label
+     comes with a translation right under it. */
+  sub?: string;
 };
 
 // Routes map 1:1 to the existing app routes — only labels and icons changed.
 const NAV_ITEMS: NavItem[] = [
-  { href: '/dashboard',   label: 'Matchday',  icon: 'Matchday' },
-  { href: '/portfolio',   label: 'Squads',    icon: 'Pitch'    },
-  { href: '/templates',   label: 'Lineups',   icon: 'Lineup'   },
-  { href: '/challenges',  label: 'Fixtures',  icon: 'Fixture'  },
-  { href: '/leaderboard', label: 'League',    icon: 'Table'    },
-  { href: '/market',      label: 'Transfer',  icon: 'Transfer' },
-  { href: '/explore',     label: 'Scout',     icon: 'Scout'    },
-  { href: '/training',    label: 'Training',  icon: 'Coach'    },
-  { href: '/compare',     label: 'Compare',   icon: 'Compare'  },
-  { href: '/guide',       label: 'Playbook',  icon: 'Whistle'  },
+  { href: '/dashboard',   label: 'Matchday',  icon: 'Matchday', sub: 'Your dashboard'      },
+  { href: '/portfolio',   label: 'Squads',    icon: 'Pitch',    sub: 'Your portfolios'     },
+  { href: '/templates',   label: 'Lineups',   icon: 'Lineup',   sub: 'Starter templates'   },
+  { href: '/challenges',  label: 'Fixtures',  icon: 'Fixture',  sub: 'Head-to-head wagers' },
+  { href: '/leaderboard', label: 'League',    icon: 'Table',    sub: 'Rankings'            },
+  { href: '/market',      label: 'Transfer',  icon: 'Transfer', sub: 'Browse stocks'       },
+  { href: '/explore',     label: 'Scout',     icon: 'Scout',    sub: 'Discover ideas'      },
+  { href: '/training',    label: 'Training',  icon: 'Coach',    sub: 'Lessons + drills'    },
+  { href: '/compare',     label: 'Compare',   icon: 'Compare',  sub: 'Side-by-side stats'  },
+  { href: '/guide',       label: 'Playbook',  icon: 'Whistle',  sub: 'Strategy guide'      },
 ];
 
 interface SidebarProps {
@@ -128,7 +132,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
               }}
             >
               <IconCmp size={18} />
-              {!isCollapsed && <span>{item.label}</span>}
+              {!isCollapsed && (
+                <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, lineHeight: 1.1 }}>
+                  <span>{item.label}</span>
+                  {item.sub && (
+                    <span
+                      className="mono"
+                      style={{
+                        fontSize: 9,
+                        marginTop: 2,
+                        color: 'var(--text-mute)',
+                        fontWeight: 500,
+                        letterSpacing: '0.04em',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {item.sub}
+                    </span>
+                  )}
+                </span>
+              )}
             </Link>
           );
         })}
@@ -201,6 +226,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="hidden lg:block" style={{ padding: 12, borderTop: '1px solid var(--line)' }}>
         <button
           onClick={onToggle}
+          aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           style={{
             display: 'flex',
             alignItems: 'center',
