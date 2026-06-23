@@ -517,15 +517,11 @@ export default function ComparePage() {
           </div>
         )}
 
-        {/* Benchmark + Timeframe */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1fr) auto',
-            gap: 12,
-            alignItems: 'stretch',
-          }}
-        >
+        {/* Benchmark + Timeframe. Stacks on phones — the MATCH CLOCK
+            card has minWidth:220 which would crush the benchmark
+            selector on a 390px viewport. */}
+        <div className="grid items-stretch gap-3 [grid-template-columns:1fr] sm:[grid-template-columns:minmax(0,1fr)_auto]">
+
           <BenchmarkSelector
             selectedBenchmarks={selectedBenchmarks}
             onToggle={handleToggleBenchmark}

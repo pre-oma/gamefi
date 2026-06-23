@@ -174,7 +174,7 @@ export default function TemplatesPage() {
         {filteredTemplates.length === 0 ? (
           <div
             className="stadium-card"
-            style={{ padding: 48, textAlign: 'center', borderStyle: 'dashed' }}
+            style={{ padding: 'clamp(24px, 6vw, 48px)', textAlign: 'center', borderStyle: 'dashed' }}
           >
             <Icon.Lineup size={36} style={{ color: 'var(--text-mute)', margin: '0 auto 12px' }} />
             <div className="display" style={{ fontSize: 16 }}>
@@ -188,7 +188,7 @@ export default function TemplatesPage() {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))',
               gap: 14,
             }}
           >
