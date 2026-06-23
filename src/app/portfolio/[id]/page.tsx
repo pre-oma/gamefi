@@ -561,7 +561,7 @@ export default function PortfolioDetailPage() {
                 color="var(--text)"
               />
 
-              <div className="flex" style={{ gap: 6, marginLeft: 4 }}>
+              <div className="flex flex-wrap" style={{ gap: 6 }}>
                 <button
                   type="button"
                   onClick={handleLike}
