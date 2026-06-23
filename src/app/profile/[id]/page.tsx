@@ -113,7 +113,7 @@ export default function ManagerProfilePage() {
   if (loading) {
     return (
       <AppLayout flush>
-        <div style={{ padding: 48, textAlign: 'center' }}>
+        <div style={{ padding: 'clamp(28px, 8vw, 48px)', textAlign: 'center' }}>
           <div className="kicker">LOADING MANAGER…</div>
         </div>
       </AppLayout>
@@ -125,7 +125,7 @@ export default function ManagerProfilePage() {
       <AppLayout flush>
         <div
           className="stadium-card"
-          style={{ padding: 48, textAlign: 'center', margin: 24 }}
+          style={{ padding: 'clamp(28px, 8vw, 48px)', textAlign: 'center', margin: 'clamp(16px, 4vw, 24px)' }}
         >
           <Icon.Profile size={36} style={{ color: 'var(--text-mute)', margin: '0 auto 12px' }} />
           <div className="display" style={{ fontSize: 18, marginBottom: 6 }}>

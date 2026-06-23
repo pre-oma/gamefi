@@ -64,7 +64,7 @@ export default function ProfilePage() {
     <AppLayout flush>
       <div
         style={{
-          padding: '20px 24px',
+          padding: 'clamp(16px, 4vw, 20px) clamp(14px, 4vw, 24px)',
           display: 'flex',
           flexDirection: 'column',
           gap: 18,
@@ -74,7 +74,7 @@ export default function ProfilePage() {
         }}
       >
         {/* Manager card */}
-        <div className="stadium-card" style={{ padding: '20px 24px' }}>
+        <div className="stadium-card" style={{ padding: 'clamp(16px, 4vw, 20px) clamp(14px, 4vw, 24px)' }}>
           <div
             className="flex flex-wrap"
             style={{ gap: 22, alignItems: 'center' }}
@@ -204,7 +204,7 @@ export default function ProfilePage() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(150px, 100%), 1fr))',
             gap: 12,
           }}
         >
@@ -231,7 +231,7 @@ export default function ProfilePage() {
           {earnedBadges.length === 0 ? (
             <div
               className="kicker"
-              style={{ padding: 24, textAlign: 'center' }}
+              style={{ padding: 'clamp(20px, 5vw, 28px)', textAlign: 'center' }}
             >
               NO TROPHIES YET — KEEP PLAYING TO UNLOCK ACHIEVEMENTS
             </div>
@@ -239,7 +239,7 @@ export default function ProfilePage() {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(min(150px, 100%), 1fr))',
                 gap: 10,
               }}
             >
@@ -292,7 +292,7 @@ export default function ProfilePage() {
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(min(96px, 100%), 1fr))',
                   gap: 6,
                 }}
               >
@@ -350,7 +350,7 @@ export default function ProfilePage() {
           </div>
 
           {portfolios.length === 0 ? (
-            <div className="kicker" style={{ padding: 24, textAlign: 'center' }}>
+            <div className="kicker" style={{ padding: 'clamp(20px, 5vw, 28px)', textAlign: 'center' }}>
               NO SQUADS FIELDED YET
             </div>
           ) : (

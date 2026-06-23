@@ -285,11 +285,12 @@ export default function SettingsPage() {
             style={{ padding: 14, background: 'var(--surface-2)', marginBottom: 10 }}
           >
             <div className="kicker" style={{ marginBottom: 6 }}>YOUR REFERRAL CODE</div>
-            <div className="flex items-center" style={{ gap: 8 }}>
+            <div className="flex items-center flex-wrap" style={{ gap: 8 }}>
               <code
                 className="mono num"
                 style={{
-                  flex: 1,
+                  flex: '1 1 160px',
+                  minWidth: 0,
                   padding: '10px 14px',
                   background: 'var(--surface)',
                   border: '1px solid var(--line)',
@@ -318,13 +319,7 @@ export default function SettingsPage() {
           title="Theme"
           subtitle={`Currently: ${resolvedTheme}`}
         >
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: 10,
-            }}
-          >
+          <div className="grid gap-[10px] [grid-template-columns:1fr] sm:[grid-template-columns:repeat(3,1fr)]">
             {(
               [
                 ['dark', 'Dark', Icon.Moon, 'Deep ink, neon green accent'],

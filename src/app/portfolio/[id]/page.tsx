@@ -451,7 +451,7 @@ export default function PortfolioDetailPage() {
 
   return (
     <AppLayout flush>
-      <div style={{ padding: '20px 24px 32px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div style={{ padding: 'clamp(14px, 4vw, 20px) clamp(14px, 4vw, 24px) clamp(20px, 6vw, 32px)', display: 'flex', flexDirection: 'column', gap: 18 }}>
         {/* ===== Header strip ===== */}
         <div
           className="stadium-card"
@@ -482,13 +482,13 @@ export default function PortfolioDetailPage() {
                 <h1
                   className="display"
                   style={{
-                    fontSize: 'clamp(22px, 2.8vw, 30px)',
+                    fontSize: 'clamp(20px, 5vw, 30px)',
                     letterSpacing: '-0.04em',
                     margin: 0,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
-                    maxWidth: 380,
+                    maxWidth: 'min(380px, 70vw)',
                   }}
                 >
                   {portfolio.name}
@@ -752,7 +752,13 @@ export default function PortfolioDetailPage() {
         {/* ===== Tabs ===== */}
         <div
           className="flex"
-          style={{ gap: 0, borderBottom: '1px solid var(--line)' }}
+          style={{
+            gap: 0,
+            borderBottom: '1px solid var(--line)',
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            scrollbarWidth: 'none',
+          }}
         >
           {(
             [
@@ -769,7 +775,7 @@ export default function PortfolioDetailPage() {
                 type="button"
                 onClick={() => setActiveTab(key)}
                 style={{
-                  padding: '10px 18px',
+                  padding: '10px clamp(12px, 4vw, 18px)',
                   background: 'transparent',
                   border: 'none',
                   borderBottom: isActive ? '2px solid var(--pitch)' : '2px solid transparent',
@@ -780,6 +786,8 @@ export default function PortfolioDetailPage() {
                   fontSize: 12,
                   textTransform: 'uppercase',
                   letterSpacing: '0.14em',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
                 }}
               >
                 {label}
@@ -1405,11 +1413,10 @@ export default function PortfolioDetailPage() {
                   Sector Breakdown
                 </div>
                 <div
+                  className="grid items-center [grid-template-columns:1fr] sm:[grid-template-columns:auto_minmax(0,1fr)]"
                   style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'auto 1fr',
                     gap: 24,
-                    alignItems: 'center',
+                    justifyItems: 'center',
                   }}
                 >
                   <div style={{ width: 180, height: 180 }}>
@@ -1443,7 +1450,7 @@ export default function PortfolioDetailPage() {
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%', minWidth: 0, justifySelf: 'stretch' }}>
                     {sectorBreakdown.map((s) => (
                       <div key={s.sector} className="flex items-center" style={{ gap: 10 }}>
                         <div
@@ -1452,12 +1459,13 @@ export default function PortfolioDetailPage() {
                             height: 12,
                             borderRadius: 2,
                             background: sectorColor(s.sector),
+                            flexShrink: 0,
                           }}
                         />
-                        <div className="display" style={{ fontSize: 13, flex: 1 }}>
+                        <div className="display" style={{ fontSize: 13, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {s.sector}
                         </div>
-                        <div className="mono num" style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+                        <div className="mono num" style={{ fontSize: 12, color: 'var(--text-dim)', flexShrink: 0 }}>
                           {s.weight.toFixed(1)}%
                         </div>
                       </div>
@@ -1495,7 +1503,7 @@ export default function PortfolioDetailPage() {
               ))}
             </div>
             {portfolio.players.filter((p) => p.asset).length === 0 ? (
-              <div style={{ padding: 48, textAlign: 'center' }}>
+              <div style={{ padding: 'clamp(24px, 6vw, 48px)', textAlign: 'center' }}>
                 <Icon.Lineup size={36} style={{ color: 'var(--text-mute)', margin: '0 auto 10px' }} />
                 <div className="display" style={{ fontSize: 16 }}>
                   No players signed yet

@@ -183,7 +183,7 @@ export default function Home() {
       <header
         className="flex items-center justify-between"
         style={{
-          padding: '16px 48px',
+          padding: 'clamp(12px, 3vw, 16px) clamp(16px, 5vw, 48px)',
           borderBottom: '1px solid var(--line)',
           flexWrap: 'wrap',
           gap: 12,
@@ -258,7 +258,7 @@ export default function Home() {
       </header>
 
       {/* ===== Hero ===== */}
-      <section style={{ padding: '56px 48px 32px', position: 'relative', overflow: 'hidden' }}>
+      <section style={{ padding: 'clamp(32px, 6vw, 56px) clamp(16px, 5vw, 48px) clamp(24px, 4vw, 32px)', position: 'relative', overflow: 'hidden' }}>
         {/* faint chalk grid backdrop */}
         <div
           style={{
@@ -280,7 +280,7 @@ export default function Home() {
             position: 'relative',
             display: 'grid',
             gridTemplateColumns: 'minmax(0, 1fr)',
-            gap: 48,
+            gap: 'clamp(32px, 6vw, 48px)',
             alignItems: 'center',
           }}
         >
@@ -462,9 +462,9 @@ export default function Home() {
         <div
           style={{
             position: 'relative',
-            marginTop: 64,
+            marginTop: 'clamp(40px, 8vw, 64px)',
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(160px, 100%), 1fr))',
             borderTop: '1px solid var(--line)',
             borderBottom: '1px solid var(--line)',
           }}
@@ -508,7 +508,7 @@ export default function Home() {
       <section
         id="how-it-works"
         style={{
-          padding: '60px 48px',
+          padding: 'clamp(40px, 8vw, 60px) clamp(16px, 5vw, 48px)',
           background: 'var(--bg-2)',
           borderTop: '1px solid var(--line)',
           borderBottom: '1px solid var(--line)',
@@ -544,7 +544,7 @@ export default function Home() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))',
             border: '1px solid var(--line)',
             background: 'var(--surface)',
           }}
@@ -594,12 +594,12 @@ export default function Home() {
       </section>
 
       {/* ===== Manager-of-the-month testimonial ===== */}
-      <section id="stories" style={{ padding: '48px 48px 60px', scrollMarginTop: 80 }}>
+      <section id="stories" style={{ padding: 'clamp(32px, 6vw, 48px) clamp(16px, 5vw, 48px) clamp(40px, 8vw, 60px)', scrollMarginTop: 80 }}>
         <div
           style={{
             background: 'var(--ink)',
             color: '#fff',
-            padding: '44px 40px',
+            padding: 'clamp(28px, 6vw, 44px) clamp(20px, 5vw, 40px)',
             borderRadius: 12,
             position: 'relative',
             overflow: 'hidden',
@@ -618,8 +618,8 @@ export default function Home() {
             style={{
               position: 'relative',
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gap: 60,
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(260px, 100%), 1fr))',
+              gap: 'clamp(32px, 5vw, 60px)',
               alignItems: 'center',
             }}
           >
@@ -712,7 +712,7 @@ export default function Home() {
       {/* ===== Final CTA ===== */}
       <section
         style={{
-          padding: '64px 24px',
+          padding: 'clamp(40px, 8vw, 64px) clamp(16px, 5vw, 24px)',
           borderTop: '1px solid var(--line)',
           background: 'var(--bg-2)',
           textAlign: 'center',
@@ -763,7 +763,7 @@ export default function Home() {
       </section>
 
       {/* ===== Footer ===== */}
-      <footer style={{ padding: '36px 32px', borderTop: '1px solid var(--line)' }}>
+      <footer style={{ padding: 'clamp(24px, 5vw, 36px) clamp(16px, 5vw, 32px)', borderTop: '1px solid var(--line)' }}>
         <div
           className="flex flex-wrap items-center"
           style={{ justifyContent: 'space-between', gap: 18 }}
