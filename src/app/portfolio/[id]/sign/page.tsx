@@ -26,6 +26,24 @@ import {
 } from '@/types';
 import { MOCK_ASSETS } from '@/data/assets';
 
+/* Mirror of the helpers in /portfolio/[id]/page.tsx — when a squad was
+   already in auto-balance mode (every filled starter within 0.5% of an
+   equal share), the bulk-sign save should re-balance after the new
+   signings rather than leave newcomers stuck at the default 9.09%. */
+const BALANCED_TOLERANCE = 0.5;
+function wasAutoBalanced(players: PortfolioPlayer[]): boolean {
+  const filled = players.filter((p) => p.asset && !p.isBench);
+  if (filled.length === 0) return true;
+  const target = 100 / filled.length;
+  return filled.every((p) => Math.abs((p.allocation ?? 0) - target) < BALANCED_TOLERANCE);
+}
+function rebalanceStarters(players: PortfolioPlayer[]): PortfolioPlayer[] {
+  const filledStarterCount = players.filter((p) => p.asset && !p.isBench).length;
+  if (filledStarterCount === 0) return players;
+  const eq = 100 / filledStarterCount;
+  return players.map((p) => (p.asset && !p.isBench ? { ...p, allocation: eq } : p));
+}
+
 /* Parse a freeform string of tickers — accepts comma-separated,
    newline-separated, or a JSON array. Returns trimmed, uppercased,
    deduped symbols. Used by both the CSV paste modal (item 16) and the
@@ -556,7 +574,8 @@ export default function SignSquadPage() {
     setError(null);
     try {
       const allSlots = [...starterPlayers, ...benchPlayers];
-      const newPlayers: PortfolioPlayer[] = allSlots.map((p) => {
+      const wasBalancedBefore = wasAutoBalanced(portfolio.players);
+      const baseNewPlayers: PortfolioPlayer[] = allSlots.map((p) => {
         const eff = effectiveAsset(p.positionId, p.asset);
         return {
           positionId: p.positionId,
@@ -565,6 +584,12 @@ export default function SignSquadPage() {
           ...(p.isBench ? { isBench: true } : {}),
         };
       });
+      // If the squad was already balanced before this batch sign-up,
+      // re-balance after so newly-signed starters get their fair share
+      // instead of the default 9.09% (which would push the total > 100).
+      const newPlayers = wasBalancedBefore
+        ? rebalanceStarters(baseNewPlayers)
+        : baseNewPlayers;
       await updatePortfolio(portfolioId, { players: newPlayers });
       /* Refetch so the user lands on the squad detail with the new
          data instead of a stale store snapshot. */

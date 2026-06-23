@@ -78,6 +78,26 @@ const EMPTY_PORTFOLIO: Portfolio = {
 
 type Tab = 'lineup' | 'transfers' | 'performance' | 'tactics';
 
+/* Tolerance for treating a squad as "in auto-balance mode" — if every
+   filled starter sits within 0.5% of an equal share, signing a new
+   stock should re-balance the lot rather than dump the newcomer on a
+   stale 9.09% and break the 100% total. */
+const BALANCED_TOLERANCE = 0.5;
+
+function wasAutoBalanced(players: { asset?: { symbol: string } | null; allocation?: number; isBench?: boolean }[]): boolean {
+  const filled = players.filter((p) => p.asset && !p.isBench);
+  if (filled.length === 0) return true;
+  const target = 100 / filled.length;
+  return filled.every((p) => Math.abs((p.allocation ?? 0) - target) < BALANCED_TOLERANCE);
+}
+
+function rebalanceStarters<T extends { asset?: { symbol: string } | null; allocation?: number; isBench?: boolean }>(players: T[]): T[] {
+  const filledStarterCount = players.filter((p) => p.asset && !p.isBench).length;
+  if (filledStarterCount === 0) return players;
+  const eq = 100 / filledStarterCount;
+  return players.map((p) => (p.asset && !p.isBench ? { ...p, allocation: eq } : p));
+}
+
 export default function PortfolioDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -311,7 +331,12 @@ export default function PortfolioDetailPage() {
     const targetPositionId = selectedPosition.player.positionId;
     const hasEntry = portfolio.players.some((p) => p.positionId === targetPositionId);
     const isBenchSlot = targetPositionId.startsWith('bench-');
-    const nextPlayers = hasEntry
+    /* Snapshot whether the squad was in auto-balance mode BEFORE this
+       signing. If yes, we'll re-balance after — otherwise the new
+       starter would sit at the default 9.09% while the others kept
+       their previously-balanced share, breaking the 100% total. */
+    const wasBalancedBefore = wasAutoBalanced(portfolio.players);
+    const baseNextPlayers = hasEntry
       ? portfolio.players.map((p) =>
           p.positionId === targetPositionId ? { ...p, asset } : p,
         )
@@ -324,6 +349,10 @@ export default function PortfolioDetailPage() {
             ...(isBenchSlot ? { isBench: true as const } : {}),
           },
         ];
+    const nextPlayers =
+      wasBalancedBefore && !isBenchSlot
+        ? rebalanceStarters(baseNextPlayers)
+        : baseNextPlayers;
     try {
       const putRes = await fetch('/api/portfolios', {
         method: 'PUT',
