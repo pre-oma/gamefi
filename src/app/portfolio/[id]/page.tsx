@@ -592,10 +592,17 @@ export default function PortfolioDetailPage() {
                   <button
                     type="button"
                     onClick={() => {
+                      // Weights only apply to the starting XI; bench
+                      // players are subs (allocation always 0).
+                      // Including them lets `p.allocation || 100/11`
+                      // falsy-coerce a real 0 into 9.09%, which steals
+                      // weight from the actual starters on save.
                       const weights: { [positionId: string]: number } = {};
-                      portfolio.players.forEach((p) => {
-                        weights[p.positionId] = p.allocation || 100 / 11;
-                      });
+                      portfolio.players
+                        .filter((p) => !p.isBench)
+                        .forEach((p) => {
+                          weights[p.positionId] = p.allocation || 100 / 11;
+                        });
                       setEditingWeights(weights);
                       setShowWeightsModal(true);
                     }}
@@ -2020,7 +2027,7 @@ export default function PortfolioDetailPage() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 320, overflowY: 'auto' }}>
             {portfolio.players
-              .filter((p) => p.asset)
+              .filter((p) => p.asset && !p.isBench)
               .map((player) => (
                 <div
                   key={player.positionId}
@@ -2112,18 +2119,29 @@ export default function PortfolioDetailPage() {
           <button
             type="button"
             onClick={() => {
-              const filledPlayers = portfolio.players.filter((p) => p.asset);
-              const equalWeight = Math.round((100 / filledPlayers.length) * 10) / 10;
+              // Only distribute across STARTING XI — bench is excluded
+              // (they're substitutes, allocation 0). If we counted them,
+              // each "filled" got 100/(11+bench) instead of 100/11,
+              // which the user perceives as their new picks "stealing"
+              // weight from the existing starters.
+              const filledStarters = portfolio.players.filter(
+                (p) => p.asset && !p.isBench,
+              );
+              if (filledStarters.length === 0) return;
+              const equalWeight = Math.round((100 / filledStarters.length) * 10) / 10;
               const next: { [positionId: string]: number } = {};
-              filledPlayers.forEach((p, idx) => {
-                if (idx === filledPlayers.length - 1) {
+              filledStarters.forEach((p, idx) => {
+                if (idx === filledStarters.length - 1) {
                   const sum = Object.values(next).reduce((s, w) => s + w, 0);
                   next[p.positionId] = Math.round((100 - sum) * 10) / 10;
                 } else {
                   next[p.positionId] = equalWeight;
                 }
               });
-              portfolio.players.filter((p) => !p.asset).forEach((p) => (next[p.positionId] = 0));
+              // Empty starting slots also get 0 so the modal total reads cleanly.
+              portfolio.players
+                .filter((p) => !p.asset && !p.isBench)
+                .forEach((p) => (next[p.positionId] = 0));
               setEditingWeights(next);
             }}
             className="stadium-btn stadium-btn-ghost"
