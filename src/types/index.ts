@@ -332,6 +332,10 @@ export interface LeaderboardEntry {
   value: number;
   returnPercent: number;
   followers: number;
+  /* Count of likes on this specific portfolio — surfaced on the
+     leaderboard under the manager name (more useful than follower
+     count for ranking social proof on a per-squad basis). */
+  likes: number;
   createdAt: string;
 }
 

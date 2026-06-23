@@ -100,6 +100,7 @@ export const LeaderboardTable: React.FC = () => {
         value: realData?.performance.totalValue || 10000,
         returnPercent: realData?.performance.totalReturnPercent || 0,
         followers: 0,
+        likes: portfolio.likes?.length || 0,
         createdAt: portfolio.createdAt,
       };
     });
@@ -238,7 +239,7 @@ export const LeaderboardTable: React.FC = () => {
                     )}
                   </div>
                   <div className="mono" style={{ fontSize: 10, color: 'var(--text-mute)' }}>
-                    {entry.followers} followers
+                    {entry.likes} {entry.likes === 1 ? 'like' : 'likes'}
                   </div>
                 </div>
               </div>

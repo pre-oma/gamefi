@@ -391,6 +391,7 @@ export const getLeaderboardEntries = (
       value: performance.totalValue,
       returnPercent,
       followers: user?.followers.length || 0,
+      likes: portfolio.likes?.length || 0,
       createdAt: portfolio.createdAt,
     };
   });
