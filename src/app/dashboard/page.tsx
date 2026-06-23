@@ -834,23 +834,18 @@ const Scoreboard: React.FC<{
         </div>
       </div>
 
-      <div
-        style={{
-          position: 'relative',
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
-          gap: 24,
-          alignItems: 'center',
-        }}
-      >
+      {/* Scoreboard: stacks vertically on phones so the centered LEAD
+          column doesn't get visually overlapped by the big YOU/S&P
+          numbers. Reverts to 3-col on >=640px. */}
+      <div className="relative grid items-center gap-4 sm:gap-6 [grid-template-columns:1fr] sm:[grid-template-columns:minmax(0,1fr)_auto_minmax(0,1fr)]">
         <div>
           <div className="kicker" style={{ color: 'rgba(255,255,255,0.5)' }}>YOU</div>
           <div
             className="display num scoreboard-num"
-            style={{ fontSize: 'clamp(36px, 4.8vw, 60px)', marginTop: 2 }}
+            style={{ fontSize: 'clamp(32px, 4.8vw, 60px)', marginTop: 2 }}
           >
             {isLoading ? '—' : `${yourSign}${yourReturn.toFixed(2)}`}
-            <span className="display" style={{ fontSize: 26, opacity: 0.65 }}>%</span>
+            <span className="display" style={{ fontSize: 24, opacity: 0.65 }}>%</span>
           </div>
           <div className="flex flex-wrap" style={{ gap: 16, marginTop: 8 }}>
             <ScoreboardStat label="EQUITY" value={formatCurrency(yourValue)} />
@@ -882,20 +877,20 @@ const Scoreboard: React.FC<{
           </div>
         </div>
 
-        <div style={{ textAlign: 'right' }}>
+        <div className="text-left sm:text-right">
           <div className="kicker" style={{ color: 'rgba(255,255,255,0.5)' }}>
             S&P 500
           </div>
           <div
             className="display num scoreboard-num"
-            style={{ fontSize: 'clamp(36px, 4.8vw, 60px)', marginTop: 2 }}
+            style={{ fontSize: 'clamp(32px, 4.8vw, 60px)', marginTop: 2 }}
           >
             {benchmarkPrice == null ? '—' : `${benchSign}${benchmarkReturn.toFixed(2)}`}
-            <span className="display" style={{ fontSize: 26, opacity: 0.65 }}>%</span>
+            <span className="display" style={{ fontSize: 24, opacity: 0.65 }}>%</span>
           </div>
           <div
-            className="flex flex-wrap"
-            style={{ gap: 16, marginTop: 8, justifyContent: 'flex-end' }}
+            className="flex flex-wrap justify-start sm:justify-end"
+            style={{ gap: 16, marginTop: 8 }}
           >
             <ScoreboardStat
               label="INDEX"

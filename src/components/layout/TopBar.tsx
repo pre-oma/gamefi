@@ -111,7 +111,13 @@ export const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed })
             title={`NYSE clock · ${pillSpec.label}`}
           >
             {pillSpec.role === 'live' && <span className="live-dot" />}
-            {pillSpec.label}
+            {/* Mobile shows the trailing word only ("OPEN", "HOLIDAY",
+                "CLOSED") so the pill doesn't crowd the icons; tablet+
+                shows the full label. */}
+            <span className="sm:hidden">
+              {pillSpec.label.split(' ').slice(-1)[0]}
+            </span>
+            <span className="hidden sm:inline">{pillSpec.label}</span>
           </span>
 
           {/* Season window pills — only render when seasonState loaded and a
